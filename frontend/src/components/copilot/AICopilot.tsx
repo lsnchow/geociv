@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useCivicStore } from '../../store';
 import { Button, Badge } from '../ui';
 import * as aiApi from '../../lib/ai-api';
+import * as api from '../../lib/api';
 import type { SimulationResponse } from '../../types/simulation';
 
 interface Message {
@@ -9,10 +10,30 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   simulationResponse?: SimulationResponse;
+  // DM-specific fields
+  isDM?: boolean;
+  dmFrom?: string;
+  dmTo?: string;
 }
 
 export function AICopilot() {
-  const { scenario, setAgentSimulation, toggleRightPanel, rightPanelOpen, speakingAsAgent, setSpeakingAsAgent } = useCivicStore();
+  const { 
+    scenario, 
+    setAgentSimulation, 
+    toggleRightPanel, 
+    rightPanelOpen, 
+    speakingAsAgent, 
+    setSpeakingAsAgent,
+    targetAgent,
+    setTargetAgent,
+    updateAgentReaction,
+    loadRelationships,
+    sessionId,
+    agentSimulation,
+  } = useCivicStore();
+  
+  // DM mode: both speaker and target are set (and target is not 'all')
+  const dmModeActive = speakingAsAgent !== null && targetAgent !== null && targetAgent !== 'all';
   
   // #region agent log
   useEffect(() => {
@@ -57,10 +78,20 @@ export function AICopilot() {
     e.preventDefault();
     if (!input.trim() || !scenario || isProcessing) return;
     
+    // Block send if target is set but no speaker
+    if (targetAgent && targetAgent !== 'all' && !speakingAsAgent) {
+      setBackboardError('Select a speaker first (click an agent card)');
+      return;
+    }
+    
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
       content: input.trim(),
+      // Tag as DM if in DM mode
+      isDM: dmModeActive,
+      dmFrom: dmModeActive ? speakingAsAgent?.name : undefined,
+      dmTo: dmModeActive && targetAgent !== 'all' ? targetAgent?.name : undefined,
     };
     
     setMessages(prev => [...prev, userMessage]);
@@ -69,35 +100,71 @@ export function AICopilot() {
     setBackboardError(null);
     
     try {
-      // Call the AI chat endpoint - NO local fallbacks
-      const response: SimulationResponse = await aiApi.chat({
-        message: userMessage.content,
-        scenario_id: scenario.id,
-        thread_id: threadId || undefined,
-        auto_simulate: true,
-        speaker_mode: speakingAsAgent ? 'agent' : 'user',
-        speaker_agent_key: speakingAsAgent?.key,
-      });
-      
-      // Store thread_id for conversation continuity
-      setThreadId(response.thread_id);
-      
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: response.assistant_message,
-        simulationResponse: response,
-      };
-      
-      setMessages(prev => [...prev, assistantMessage]);
-      
-      // If we got reactions/zones, update the store
-      if (response.reactions.length > 0 || response.zones.length > 0) {
-        setAgentSimulation(response);
+      // ========== DM MODE: Call /v1/ai/dm ==========
+      if (dmModeActive && targetAgent !== 'all') {
+        const dmResponse = await api.sendDM({
+          session_id: sessionId,
+          from_agent_key: speakingAsAgent!.key,
+          to_agent_key: targetAgent.key,
+          message: userMessage.content,
+          // Pass current proposal title if available for stance context
+          proposal_title: agentSimulation?.proposal?.title,
+        });
         
-        // Auto-open the right panel if there are reactions
-        if (response.reactions.length > 0 && !rightPanelOpen) {
-          toggleRightPanel();
+        const assistantMessage: Message = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: dmResponse.reply,
+          isDM: true,
+          dmFrom: targetAgent.name,
+          dmTo: speakingAsAgent!.name,
+        };
+        
+        setMessages(prev => [...prev, assistantMessage]);
+        
+        // Update target agent's reaction if stance changed
+        if (dmResponse.stance_update?.stance_changed && dmResponse.stance_update.new_stance) {
+          updateAgentReaction(targetAgent.key, {
+            stance: dmResponse.stance_update.new_stance as 'support' | 'oppose' | 'neutral',
+            intensity: dmResponse.stance_update.new_intensity ?? undefined,
+            quote: `After talking with ${speakingAsAgent!.name}: "${dmResponse.stance_update.reason}"`,
+          });
+        }
+        
+        // Refresh relationships
+        loadRelationships(sessionId);
+        
+      } else {
+        // ========== NORMAL MODE: Call /v1/ai/chat ==========
+        const response: SimulationResponse = await aiApi.chat({
+          message: userMessage.content,
+          scenario_id: scenario.id,
+          thread_id: threadId || undefined,
+          auto_simulate: true,
+          speaker_mode: speakingAsAgent ? 'agent' : 'user',
+          speaker_agent_key: speakingAsAgent?.key,
+        });
+        
+        // Store thread_id for conversation continuity
+        setThreadId(response.thread_id);
+        
+        const assistantMessage: Message = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: response.assistant_message,
+          simulationResponse: response,
+        };
+        
+        setMessages(prev => [...prev, assistantMessage]);
+        
+        // If we got reactions/zones, update the store
+        if (response.reactions.length > 0 || response.zones.length > 0) {
+          setAgentSimulation(response);
+          
+          // Auto-open the right panel if there are reactions
+          if (response.reactions.length > 0 && !rightPanelOpen) {
+            toggleRightPanel();
+          }
         }
       }
       
@@ -160,19 +227,8 @@ export function AICopilot() {
           <div className="flex items-center gap-2">
             <span className="text-civic-accent">⌘K</span>
             <span className="text-sm font-medium text-civic-text">CivicSim AI</span>
-            {threadId && (
+            {threadId && !dmModeActive && (
               <Badge variant="default" size="sm">Thread Active</Badge>
-            )}
-            {speakingAsAgent && (
-              <Badge variant="default" size="sm" className="bg-purple-500/20 text-purple-300 border-purple-500/30">
-                {speakingAsAgent.avatar} Speaking as {speakingAsAgent.name}
-                <button 
-                  onClick={() => setSpeakingAsAgent(null)}
-                  className="ml-1 hover:text-white"
-                >
-                  ✕
-                </button>
-              </Badge>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -190,6 +246,45 @@ export function AICopilot() {
             </button>
           </div>
         </div>
+        
+        {/* DM Mode Banner */}
+        {dmModeActive && targetAgent !== 'all' && (
+          <div className="px-4 py-2 bg-purple-500/20 border-b border-purple-500/30 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-purple-400 font-medium">DM:</span>
+              <span className="text-purple-300">{speakingAsAgent?.avatar} {speakingAsAgent?.name}</span>
+              <span className="text-purple-400">→</span>
+              <span className="text-purple-300">{targetAgent.name}</span>
+            </div>
+            <button
+              onClick={() => {
+                setSpeakingAsAgent(null);
+                setTargetAgent(null);
+              }}
+              className="text-xs text-purple-400 hover:text-purple-200 px-2 py-1 rounded bg-purple-500/20 hover:bg-purple-500/30 transition-colors"
+            >
+              Exit DM
+            </button>
+          </div>
+        )}
+        
+        {/* Speaking-as banner (when not in full DM mode) */}
+        {speakingAsAgent && !dmModeActive && (
+          <div className="px-4 py-2 bg-purple-500/10 border-b border-purple-500/20 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-purple-300">{speakingAsAgent.avatar} Speaking as {speakingAsAgent.name}</span>
+              {targetAgent === null && (
+                <span className="text-purple-400/60 text-xs">• Click an agent to start DM</span>
+              )}
+            </div>
+            <button
+              onClick={() => setSpeakingAsAgent(null)}
+              className="text-xs text-purple-400 hover:text-purple-200"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         
         {/* Backboard Error Banner */}
         {backboardError && (
@@ -221,10 +316,21 @@ export function AICopilot() {
               <div
                 className={`max-w-[85%] rounded-lg px-4 py-3 ${
                   msg.role === 'user'
-                    ? 'bg-civic-accent text-white'
-                    : 'bg-civic-elevated text-civic-text'
+                    ? msg.isDM 
+                      ? 'bg-purple-600 text-white' 
+                      : 'bg-civic-accent text-white'
+                    : msg.isDM
+                      ? 'bg-purple-500/20 text-civic-text border border-purple-500/30'
+                      : 'bg-civic-elevated text-civic-text'
                 }`}
               >
+                {/* DM tag */}
+                {msg.isDM && (
+                  <div className="flex items-center gap-2 text-[10px] text-purple-400 mb-1">
+                    <span className="px-1.5 py-0.5 bg-purple-500/30 rounded font-medium">DM</span>
+                    <span>{msg.dmFrom} → {msg.dmTo}</span>
+                  </div>
+                )}
                 <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
                 
                 {/* Show simulation summary */}
@@ -276,10 +382,10 @@ export function AICopilot() {
           
           {isProcessing && (
             <div className="flex justify-start">
-              <div className="bg-civic-elevated text-civic-text rounded-lg px-4 py-3">
+              <div className={`rounded-lg px-4 py-3 ${dmModeActive ? 'bg-purple-500/20 text-purple-300' : 'bg-civic-elevated text-civic-text'}`}>
                 <div className="flex items-center gap-2">
                   <span className="animate-spin">🔄</span>
-                  <span>Simulating community reactions...</span>
+                  <span>{dmModeActive ? `Waiting for ${targetAgent !== 'all' ? targetAgent?.name : 'agent'} to respond...` : 'Simulating community reactions...'}</span>
                 </div>
               </div>
             </div>
@@ -295,10 +401,12 @@ export function AICopilot() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={speakingAsAgent 
-              ? `Speak as ${speakingAsAgent.name}...` 
-              : "Describe a proposal or ask a question..."}
-            className="flex-1 px-3 py-2 bg-civic-bg border border-civic-border rounded-lg text-civic-text placeholder-civic-text-secondary focus:outline-none focus:border-civic-accent"
+            placeholder={dmModeActive && targetAgent !== 'all'
+              ? `Message ${targetAgent.name} as ${speakingAsAgent?.name}...`
+              : speakingAsAgent 
+                ? `Speak as ${speakingAsAgent.name}...` 
+                : "Describe a proposal or ask a question..."}
+            className={`flex-1 px-3 py-2 bg-civic-bg border rounded-lg text-civic-text placeholder-civic-text-secondary focus:outline-none ${dmModeActive ? 'border-purple-500/50 focus:border-purple-500' : 'border-civic-border focus:border-civic-accent'}`}
             disabled={isProcessing}
             autoFocus
           />
@@ -306,8 +414,9 @@ export function AICopilot() {
             type="submit" 
             loading={isProcessing}
             disabled={!input.trim() || isProcessing || !scenario}
+            className={dmModeActive ? 'bg-purple-600 hover:bg-purple-700' : ''}
           >
-            Send
+            {dmModeActive ? 'Send DM' : 'Send'}
           </Button>
         </form>
         

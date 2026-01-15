@@ -7,9 +7,20 @@ import { useCivicStore } from '../../store';
 import { ProposalMarker } from './ProposalMarker';
 import * as aiApi from '../../lib/ai-api';
 import type { ZoneDescription } from '../../types/ai';
-import type { ZoneSentiment } from '../../types/simulation';
+import type { ZoneSentiment, AgentReaction } from '../../types/simulation';
 import kingstonZones from '../../data/kingston-zones.json';
 import 'maplibre-gl/dist/maplibre-gl.css';
+
+// Default agent avatars by region (agent_key == region_id)
+const DEFAULT_AGENTS: Record<string, { avatar: string; name: string; role: string }> = {
+  north_end: { avatar: '👨‍👩‍👧‍👦', name: 'Patricia Lawson', role: 'North End Parent' },
+  university: { avatar: '🎓', name: 'Jordan Okafor', role: "Queen's Student Rep" },
+  west_kingston: { avatar: '🏡', name: 'Helen Drummond', role: 'West End Homeowner' },
+  downtown: { avatar: '☕', name: 'Marcus Chen', role: 'Downtown Business Owner' },
+  industrial: { avatar: '🏭', name: 'Dave Kowalski', role: 'Trades & Jobs Advocate' },
+  waterfront_west: { avatar: '🌊', name: 'Priya Sharma', role: 'Waterfront Housing Renter' },
+  sydenham: { avatar: '✊', name: 'Keisha Williams', role: 'Sydenham Organizer' },
+};
 
 // ============================================================================
 // Map Error Boundary - catches WebGL/deck.gl errors and shows recovery UI
@@ -154,6 +165,9 @@ export function MapArena({}: MapArenaProps) {
     zoneSentiments,
     selectedZoneId,
     setSelectedZoneId,
+    agentSimulation,
+    setDmTarget,
+    setSpeakingAs,
   } = useCivicStore();
   
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
@@ -293,12 +307,19 @@ export function MapArena({}: MapArenaProps) {
         ? (sentiment.score > 0 ? '+' : '') + (sentiment.score * 100).toFixed(0) + '%'
         : '';
       
+      // Find the regional agent for this zone (agent_key == zone_id)
+      // Use simulation data if available, otherwise fall back to defaults
+      const simAgent = agentSimulation?.reactions.find(r => r.agent_key === feature.properties.id);
+      const defaultAgent = DEFAULT_AGENTS[feature.properties.id];
+      const avatar = simAgent?.avatar || defaultAgent?.avatar || '';
+      
       return {
         id: feature.properties.id,
         name: feature.properties.name,
         position: [centroid[0] / n, centroid[1] / n] as [number, number],
         scoreText,
         sentiment,
+        avatar,
       };
     });
 
@@ -308,9 +329,17 @@ export function MapArena({}: MapArenaProps) {
       pickable: false,
       getPosition: (d: typeof labelData[0]) => d.position,
       getText: (d: typeof labelData[0]) => {
-        // Show name + score at higher zoom, just name at lower zoom
-        if (viewState.zoom >= 12.5 && d.scoreText) {
-          return `${d.name}\n${d.scoreText}`;
+        // Show avatar + name + score at higher zoom, just name at lower zoom
+        if (viewState.zoom >= 12.5) {
+          const parts = [];
+          if (d.avatar) parts.push(d.avatar);
+          parts.push(d.name);
+          if (d.scoreText) parts.push(d.scoreText);
+          return parts.join('\n');
+        }
+        // At medium zoom, show avatar + name
+        if (d.avatar && viewState.zoom >= 11.5) {
+          return `${d.avatar}\n${d.name}`;
         }
         return d.name;
       },
@@ -325,11 +354,11 @@ export function MapArena({}: MapArenaProps) {
       // Only show labels at zoom >= 11
       visible: viewState.zoom >= 11,
       updateTriggers: {
-        getText: [zoneSentiments, viewState.zoom],
+        getText: [zoneSentiments, agentSimulation, viewState.zoom],
         getSize: [viewState.zoom],
       },
     });
-  }, [zoneSentiments, viewState.zoom]);
+  }, [zoneSentiments, agentSimulation, viewState.zoom]);
 
   // Fetch zone description
   const fetchZoneDescription = useCallback(async (clusterId: string) => {
@@ -465,11 +494,17 @@ export function MapArena({}: MapArenaProps) {
         />
       )}
       
-      {/* Zone sentiment panel (from multi-agent simulation) */}
-      {selectedZoneId && zoneSentiments.length > 0 && (() => {
+      {/* Zone panel - shows regional agent info (with or without simulation) */}
+      {selectedZoneId && (() => {
         const zoneSentiment = zoneSentiments.find(z => z.zone_id === selectedZoneId);
         const zoneInfo = kingstonZones.features.find(f => f.properties.id === selectedZoneId);
-        if (!zoneSentiment && !zoneInfo) return null;
+        // Find the regional agent for this zone (agent_key == zone_id)
+        // Use simulation data if available, otherwise fall back to defaults
+        const regionalAgent: AgentReaction | undefined = agentSimulation?.reactions.find(
+          r => r.agent_key === selectedZoneId
+        );
+        const defaultAgent = DEFAULT_AGENTS[selectedZoneId];
+        if (!zoneSentiment && !zoneInfo && !defaultAgent) return null;
         
         return (
           <div className="absolute left-4 bottom-4 w-80 bg-civic-surface/95 backdrop-blur border border-civic-border rounded-lg shadow-xl overflow-hidden z-20">
@@ -492,7 +527,85 @@ export function MapArena({}: MapArenaProps) {
                 </p>
               )}
               
-              {zoneSentiment && (
+              {/* Regional Representative Card - show simulation agent or default */}
+              {(regionalAgent || defaultAgent) && (
+                <div className="bg-civic-elevated rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{regionalAgent?.avatar || defaultAgent?.avatar}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-civic-text truncate">
+                        {regionalAgent?.agent_name || defaultAgent?.name}
+                      </div>
+                      <div className="text-[10px] text-civic-text-secondary truncate">
+                        {regionalAgent?.role || defaultAgent?.role}
+                      </div>
+                    </div>
+                    {regionalAgent && (
+                      <div className={`text-lg font-bold font-mono ${
+                        regionalAgent.stance === 'support' ? 'text-civic-support' :
+                        regionalAgent.stance === 'oppose' ? 'text-civic-oppose' : 'text-civic-neutral'
+                      }`}>
+                        {regionalAgent.stance === 'support' ? '+' : regionalAgent.stance === 'oppose' ? '-' : ''}
+                        {(regionalAgent.intensity * 100).toFixed(0)}%
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Bio - only from simulation data */}
+                  {regionalAgent?.bio && (
+                    <p className="text-[10px] text-civic-text-secondary line-clamp-2">
+                      {regionalAgent.bio}
+                    </p>
+                  )}
+                  
+                  {/* Tags - only from simulation data */}
+                  {regionalAgent?.tags && regionalAgent.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {regionalAgent.tags.slice(0, 4).map(tag => (
+                        <span key={tag} className="px-1.5 py-0.5 bg-civic-muted/30 rounded text-[9px] text-civic-text-secondary">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Quote - only from simulation data */}
+                  {regionalAgent?.quote && (
+                    <div className={`text-xs p-2 rounded ${
+                      regionalAgent.stance === 'support' ? 'bg-green-500/10 text-green-300' :
+                      regionalAgent.stance === 'oppose' ? 'bg-red-500/10 text-red-300' : 
+                      'bg-yellow-500/10 text-yellow-300'
+                    }`}>
+                      "{regionalAgent.quote}"
+                    </div>
+                  )}
+                  
+                  {/* Action buttons */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        setDmTarget(regionalAgent?.agent_key || selectedZoneId);
+                        setSelectedZoneId(null);
+                      }}
+                      className="flex-1 px-2 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs rounded transition-colors"
+                    >
+                      💬 DM
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSpeakingAs(regionalAgent?.agent_key || selectedZoneId);
+                        setSelectedZoneId(null);
+                      }}
+                      className="flex-1 px-2 py-1.5 bg-civic-muted hover:bg-civic-border text-civic-text text-xs rounded transition-colors"
+                    >
+                      🎭 Speak As
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* If no agent found, show zone sentiment */}
+              {!regionalAgent && zoneSentiment && (
                 <>
                   {/* Sentiment score */}
                   <div className="flex items-center gap-2">
@@ -544,93 +657,6 @@ export function MapArena({}: MapArenaProps) {
           </div>
         );
       })()}
-      
-      {/* Zone description panel (legacy - for clusters without multi-agent sim) */}
-      {selectedZoneId && zoneSentiments.length === 0 && (
-        <div className="absolute left-4 bottom-4 w-80 bg-civic-surface/95 backdrop-blur border border-civic-border rounded-lg shadow-xl overflow-hidden z-20">
-          {isLoadingZone ? (
-            <div className="p-4 text-center">
-              <div className="animate-pulse text-xl mb-2">🔍</div>
-              <p className="text-xs text-civic-text-secondary">Analyzing zone...</p>
-            </div>
-          ) : zoneDescription ? (
-            <div className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-civic-text">
-                  {zoneDescription.primary_character}
-                </h3>
-                <button
-                  onClick={() => {
-                    setSelectedZoneId(null);
-                    setZoneDescription(null);
-                  }}
-                  className="text-civic-text-secondary hover:text-civic-text"
-                >
-                  ✕
-                </button>
-              </div>
-              
-              <p className="text-xs text-civic-text-secondary">
-                {zoneDescription.description}
-              </p>
-              
-              {/* Archetype breakdown */}
-              <div>
-                <h4 className="text-[10px] text-civic-text-secondary mb-1">DEMOGRAPHICS</h4>
-                <div className="flex flex-wrap gap-1">
-                  {zoneDescription.dominant_archetypes.map(a => (
-                    <span key={a} className="px-1.5 py-0.5 bg-civic-muted/30 rounded text-[10px] text-civic-text">
-                      {a.replace('_', ' ')}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Recommendations */}
-              {zoneDescription.recommended_proposals.length > 0 && (
-                <div>
-                  <h4 className="text-[10px] text-civic-support mb-1">✓ RECOMMENDED</h4>
-                  <div className="text-xs text-civic-text-secondary">
-                    {zoneDescription.recommended_proposals.join(', ')}
-                  </div>
-                </div>
-              )}
-              
-              {zoneDescription.avoid_proposals.length > 0 && (
-                <div>
-                  <h4 className="text-[10px] text-civic-oppose mb-1">✗ AVOID</h4>
-                  <div className="text-xs text-civic-text-secondary">
-                    {zoneDescription.avoid_proposals.join(', ')}
-                  </div>
-                </div>
-              )}
-              
-              {/* Current score */}
-              {zoneDescription.current_score !== undefined && (
-                <div className="pt-2 border-t border-civic-border">
-                  <div className={`text-sm font-mono ${
-                    zoneDescription.current_score > 20 ? 'text-civic-support' :
-                    zoneDescription.current_score < -20 ? 'text-civic-oppose' : 'text-civic-neutral'
-                  }`}>
-                    Score: {zoneDescription.current_score > 0 ? '+' : ''}{zoneDescription.current_score.toFixed(0)}
-                  </div>
-                  {zoneDescription.score_explanation && (
-                    <p className="text-[10px] text-civic-text-secondary mt-1">
-                      {zoneDescription.score_explanation}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="p-4">
-              <p className="text-xs text-civic-text-secondary">
-                Click a zone to see AI analysis
-              </p>
-            </div>
-          )}
-        </div>
-      )}
       
       {/* Hover tooltip */}
       {hoverInfo?.object && !selectedZoneId && (

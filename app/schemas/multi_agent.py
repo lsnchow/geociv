@@ -54,10 +54,16 @@ class ZoneEffect(BaseModel):
 
 
 class AgentReaction(BaseModel):
-    """Single agent's reaction to a proposal."""
-    agent_key: str
-    agent_name: str
+    """Single agent's reaction to a proposal.
+    
+    Note: agent_key == region_id (canonical rule).
+    """
+    agent_key: str  # == region_id
+    agent_name: str  # display_name
     avatar: str = ""
+    role: str = ""  # e.g., "North End Parent"
+    bio: str = ""   # UI-only identity field
+    tags: list[str] = Field(default_factory=list)  # e.g., ["families", "safety"]
     stance: Literal["support", "oppose", "neutral"] = "neutral"
     intensity: float = Field(ge=0.0, le=1.0, default=0.5)
     support_reasons: list[str] = Field(default_factory=list, max_length=3)

@@ -17,7 +17,11 @@ from app.agents.session_manager import get_session_manager
 logger = logging.getLogger(__name__)
 
 # Reaction prompt template
-REACTION_PROMPT = """You are {agent_name}, {agent_role}.
+REACTION_PROMPT = """You are {agent_name}, the {agent_role} representing {region_name}.
+
+BIO: {bio}
+
+SPEAKING STYLE: {speaking_style}
 
 {persona}
 
@@ -27,19 +31,19 @@ TYPE: {proposal_type}
 SUMMARY: {proposal_summary}
 AFFECTED AREAS: {affected_zones}
 
-Based on your persona, priorities, and concerns, provide your reaction.
+Based on your persona, priorities, concerns, and your region's interests, provide your reaction.
 
 Respond with ONLY valid JSON:
 - stance: "support", "oppose", or "neutral"
 - intensity: 0.0 to 1.0 (how strongly you feel)
 - support_reasons: list of 0-3 reasons you support (if any)
 - concerns: list of 0-3 concerns you have
-- quote: your reaction in 25 words or less, in first person, in character
+- quote: your reaction in 25 words or less, in first person, in character, using your speaking style
 - what_would_change_my_mind: 1-3 things that would shift your position
 - zones_most_affected: list of zones you think are most impacted, each with zone_id, effect (support/oppose/neutral), intensity
 - proposed_amendments: 0-3 changes you'd propose to improve it
 
-Available zone_ids: north_end, university, west_kingston, downtown, industrial, waterfront_west
+Available zone_ids: north_end, university, west_kingston, downtown, industrial, waterfront_west, sydenham
 
 Respond with JSON only."""
 
@@ -104,10 +108,17 @@ class AgentReactor:
         else:
             affected = "Citywide"
         
-        # Build prompt
+        # Build prompt - use new agent fields
+        agent_key = agent["key"]
+        zone = next((z for z in ZONES if z["id"] == agent_key), None)
+        region_name = zone["name"] if zone else agent_key
+        
         prompt = REACTION_PROMPT.format(
-            agent_name=agent["name"],
+            agent_name=agent.get("display_name", agent.get("name", "Agent")),
             agent_role=agent["role"],
+            region_name=region_name,
+            bio=agent.get("bio", ""),
+            speaking_style=agent.get("speaking_style", "Direct and clear"),
             persona=agent["persona"],
             proposal_title=proposal.title,
             proposal_type=proposal.type,
@@ -185,26 +196,46 @@ class AgentReactor:
                     intensity=z.get("intensity", 0.5),
                 ))
         
+        # Normalize list fields - LLM sometimes returns objects instead of strings
+        def normalize_string_list(items: list) -> list[str]:
+            result = []
+            for item in items:
+                if isinstance(item, str):
+                    result.append(item)
+                elif isinstance(item, dict):
+                    # Extract first string value from dict
+                    for v in item.values():
+                        if isinstance(v, str):
+                            result.append(v)
+                            break
+            return result
+        
         return AgentReaction(
             agent_key=agent["key"],
-            agent_name=agent["name"],
+            agent_name=agent.get("display_name", agent.get("name", "Agent")),
             avatar=agent.get("avatar", "👤"),
+            role=agent.get("role", ""),
+            bio=agent.get("bio", ""),
+            tags=agent.get("tags", []),
             stance=data.get("stance", "neutral"),
             intensity=min(1.0, max(0.0, data.get("intensity", 0.5))),
-            support_reasons=data.get("support_reasons", [])[:3],
-            concerns=data.get("concerns", [])[:3],
+            support_reasons=normalize_string_list(data.get("support_reasons", []))[:3],
+            concerns=normalize_string_list(data.get("concerns", []))[:3],
             quote=data.get("quote", "")[:150],
-            what_would_change_my_mind=data.get("what_would_change_my_mind", [])[:3],
+            what_would_change_my_mind=normalize_string_list(data.get("what_would_change_my_mind", []))[:3],
             zones_most_affected=zone_effects,
-            proposed_amendments=data.get("proposed_amendments", [])[:3],
+            proposed_amendments=normalize_string_list(data.get("proposed_amendments", []))[:3],
         )
     
     def _fallback_reaction(self, agent: dict) -> AgentReaction:
         """Create a neutral fallback reaction when LLM fails."""
         return AgentReaction(
             agent_key=agent["key"],
-            agent_name=agent["name"],
+            agent_name=agent.get("display_name", agent.get("name", "Agent")),
             avatar=agent.get("avatar", "👤"),
+            role=agent.get("role", ""),
+            bio=agent.get("bio", ""),
+            tags=agent.get("tags", []),
             stance="neutral",
             intensity=0.5,
             quote="I need more information to form an opinion on this.",
