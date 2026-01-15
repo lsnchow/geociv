@@ -1,0 +1,127 @@
+// Multi-agent simulation types
+
+// =============================================================================
+// Proposal Interpretation
+// =============================================================================
+
+export interface ProposalLocation {
+  kind: 'none' | 'zone' | 'point' | 'polygon';
+  zone_ids: string[];
+  point?: { lat: number; lng: number } | null;
+  polygon?: GeoJSON.Polygon | null;
+}
+
+export interface ProposalParameters {
+  scale: number;
+  budget_millions?: number | null;
+  target_group?: string | null;
+}
+
+export interface InterpretedProposal {
+  type: 'build' | 'policy';
+  title: string;
+  summary: string;
+  location: ProposalLocation;
+  parameters: ProposalParameters;
+}
+
+// =============================================================================
+// Agent Reaction
+// =============================================================================
+
+export interface ZoneEffect {
+  zone_id: string;
+  effect: 'support' | 'oppose' | 'neutral';
+  intensity: number;
+}
+
+export interface AgentReaction {
+  agent_key: string;
+  agent_name: string;
+  avatar: string;
+  stance: 'support' | 'oppose' | 'neutral';
+  intensity: number;
+  support_reasons: string[];
+  concerns: string[];
+  quote: string;
+  what_would_change_my_mind: string[];
+  zones_most_affected: ZoneEffect[];
+  proposed_amendments: string[];
+}
+
+// =============================================================================
+// Zone Sentiment
+// =============================================================================
+
+export interface QuoteAttribution {
+  agent_name: string;
+  quote: string;
+}
+
+export interface ZoneSentiment {
+  zone_id: string;
+  zone_name: string;
+  sentiment: 'support' | 'oppose' | 'neutral';
+  score: number; // -1 to +1
+  top_support_quotes: QuoteAttribution[];
+  top_oppose_quotes: QuoteAttribution[];
+}
+
+// =============================================================================
+// Town Hall Transcript
+// =============================================================================
+
+export interface TranscriptTurn {
+  speaker: string;
+  text: string;
+}
+
+export interface TownHallTranscript {
+  moderator_summary: string;
+  turns: TranscriptTurn[];
+  compromise_options: string[];
+}
+
+// =============================================================================
+// Full Response
+// =============================================================================
+
+export interface SimulationReceipt {
+  provider: string;
+  memory: string;
+  model_name: string;
+  agent_count: number;
+  duration_ms: number;
+  run_hash: string;
+  timestamp: string;
+}
+
+export interface SimulationResponse {
+  session_id: string;
+  thread_id: string;
+  assistant_message: string;
+  proposal?: InterpretedProposal | null;
+  reactions: AgentReaction[];
+  zones: ZoneSentiment[];
+  town_hall?: TownHallTranscript | null;
+  receipt: SimulationReceipt;
+  error?: string | null;
+}
+
+// Alias for compatibility
+export type MultiAgentResponse = SimulationResponse;
+
+// =============================================================================
+// Zone GeoJSON Feature
+// =============================================================================
+
+export interface ZoneFeatureProperties {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface ZoneFeature extends GeoJSON.Feature<GeoJSON.Polygon, ZoneFeatureProperties> {}
+
+export interface ZoneFeatureCollection extends GeoJSON.FeatureCollection<GeoJSON.Polygon, ZoneFeatureProperties> {}
+

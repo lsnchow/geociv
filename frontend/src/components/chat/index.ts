@@ -1,0 +1,2 @@
+export { QuickChat } from './QuickChat';
+

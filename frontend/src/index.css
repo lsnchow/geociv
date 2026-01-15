@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --color-civic-bg: #0a0a0b;
+  --color-civic-surface: #111113;
+  --color-civic-elevated: #18181b;
+  --color-civic-border: #27272a;
+  --color-civic-muted: #3f3f46;
+  --color-civic-text: #fafafa;
+  --color-civic-text-secondary: #a1a1aa;
+  --color-civic-accent: #3b82f6;
+  --color-civic-accent-muted: #1d4ed8;
+  --color-civic-support: #22c55e;
+  --color-civic-support-muted: #15803d;
+  --color-civic-oppose: #ef4444;
+  --color-civic-oppose-muted: #b91c1c;
+  --color-civic-neutral: #71717a;
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hjp-Ek-_EeA.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/jetbrainsmono/v18/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPVmUsaaDhw.woff2') format('woff2');
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--color-civic-bg);
+  color: var(--color-civic-text);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-civic-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-civic-muted);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-civic-text-secondary);
+}
+
+/* Map container */
+.maplibregl-map {
+  font-family: inherit;
+}
+
+.maplibregl-ctrl-attrib {
+  display: none !important;
+}
