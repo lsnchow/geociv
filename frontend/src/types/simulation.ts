@@ -59,6 +59,7 @@ export interface AdoptedEvent {
 
 // =============================================================================
 // Agent Reaction
+// Note: agent_key == region_id (canonical rule)
 // =============================================================================
 
 export interface ZoneEffect {
@@ -68,9 +69,12 @@ export interface ZoneEffect {
 }
 
 export interface AgentReaction {
-  agent_key: string;
-  agent_name: string;
+  agent_key: string;  // == region_id
+  agent_name: string; // display_name
   avatar: string;
+  role: string;       // e.g., "North End Parent"
+  bio: string;        // UI-only identity field
+  tags: string[];     // e.g., ["families", "safety"]
   stance: 'support' | 'oppose' | 'neutral';
   intensity: number;
   support_reasons: string[];
@@ -145,10 +149,11 @@ export type MultiAgentResponse = SimulationResponse;
 
 // =============================================================================
 // Zone GeoJSON Feature
+// Note: id == agent_key (canonical rule)
 // =============================================================================
 
 export interface ZoneFeatureProperties {
-  id: string;
+  id: string;           // zone_id == agent_key
   name: string;
   description: string;
 }

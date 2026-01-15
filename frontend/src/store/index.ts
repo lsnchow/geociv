@@ -51,6 +51,9 @@ interface CivicState {
   relationships: RelationshipEdge[];
   isSendingDM: boolean;
   
+  // Session ID for thread continuity (initialized once per app load)
+  sessionId: string;
+  
   // Adopted proposals
   adoptedProposals: AdoptedEvent[];
   isAdopting: boolean;
@@ -98,6 +101,7 @@ interface CivicState {
   sendDM: (sessionId: string, message: string, proposalTitle?: string) => Promise<void>;
   updateAgentReaction: (agentKey: string, updates: Partial<AgentReaction>) => void;
   loadRelationships: (sessionId: string) => Promise<void>;
+  exitDMMode: () => void;
   
   // Adoption actions
   adoptProposal: (proposal: InterpretedProposal, reactions: AgentReaction[], sessionId: string) => Promise<void>;
@@ -146,6 +150,7 @@ export const useCivicStore = create<CivicState>()(
       targetAgent: null,
       relationships: [],
       isSendingDM: false,
+      sessionId: crypto.randomUUID(),
       
       // Adopted proposals
       adoptedProposals: [],
@@ -409,6 +414,11 @@ export const useCivicStore = create<CivicState>()(
           console.warn('Failed to load relationships:', error);
         }
       },
+      
+      exitDMMode: () => set({
+        speakingAsAgent: null,
+        targetAgent: null,
+      }),
       
       clearAgentSimulation: () => set({
         agentSimulation: null,

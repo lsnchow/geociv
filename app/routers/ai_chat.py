@@ -94,8 +94,9 @@ async def ai_chat(request: AIChatRequest):
             from app.agents.definitions import get_agent
             agent = get_agent(request.speaker_agent_key)
             if agent:
-                effective_message = f"[{agent['name']} ({agent['role']}) proposes]: {request.message}"
-                logger.info(f"[SIM] Speaking as agent: {agent['name']}")
+                agent_name = agent.get('display_name', agent.get('name', 'Agent'))
+                effective_message = f"[{agent_name} ({agent['role']}) proposes]: {request.message}"
+                logger.info(f"[SIM] Speaking as agent: {agent_name}")
         
         # =================================================================
         # ALWAYS RUN FULL SIMULATION - no chatbot fallback
@@ -405,12 +406,8 @@ async def send_dm(request: DMRequest):
     from app.agents.session_manager import get_session_manager
     from app.agents.definitions import get_agent
     
-    session = get_session_manager().get_session(request.session_id)
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {request.session_id} not found"
-        )
+    # Use get_or_create to allow DMs even before simulation runs
+    session = get_session_manager().get_or_create_session(request.session_id)
     
     from_agent = get_agent(request.from_agent_key)
     to_agent = get_agent(request.to_agent_key)
@@ -438,18 +435,22 @@ async def send_dm(request: DMRequest):
         
         dm_thread_id = session.dm_threads[dm_key]
         
+        # Get display names
+        from_name = from_agent.get('display_name', from_agent.get('name', 'Agent'))
+        to_name = to_agent.get('display_name', to_agent.get('name', 'Agent'))
+        
         # Build DM prompt with speaker context
         dm_prompt = f"""[DIRECT MESSAGE]
-From: {from_agent['name']} ({from_agent['role']})
-To: {to_agent['name']} ({to_agent['role']})
+From: {from_name} ({from_agent['role']})
+To: {to_name} ({to_agent['role']})
 
-{from_agent['name']} says: "{request.message}"
+{from_name} says: "{request.message}"
 
 ---
-You are {to_agent['name']}. Respond to this message in character.
+You are {to_name}. Respond to this message in character.
 Context: {to_agent['persona'][:300]}
 
-Respond naturally as {to_agent['name']} would."""
+Respond naturally as {to_name} would."""
 
         logger.info(f"[DM] {request.from_agent_key} -> {request.to_agent_key}: {request.message[:50]}...")
         
@@ -462,11 +463,11 @@ Respond naturally as {to_agent['name']} would."""
         
         structured_prompt = f"""Based on the conversation{proposal_context}, provide a brief assessment.
 
-{to_agent['name']} just said: "{reply[:200]}"
+{to_name} just said: "{reply[:200]}"
 
 Respond with ONLY valid JSON:
 {{
-  "relationship_delta": <float -1 to +1, how much {to_agent['name']}'s opinion of {from_agent['name']} changed>,
+  "relationship_delta": <float -1 to +1, how much {to_name}'s opinion of {from_name} changed>,
   "stance_changed": <true/false if stance on current proposal changed>,
   "new_stance": <"support"/"oppose"/"neutral" if changed, null otherwise>,
   "new_intensity": <0.0-1.0 if stance changed, null otherwise>,
@@ -521,7 +522,7 @@ JSON only:"""
             main_thread_id = session.agent_threads.get(request.to_agent_key)
             if main_thread_id:
                 stance_summary = f"""[STANCE UPDATE]
-After talking with {from_agent['name']}, I'm now {stance_update.new_stance or 'reconsidering'} the proposal "{request.proposal_title}".
+After talking with {from_name}, I'm now {stance_update.new_stance or 'reconsidering'} the proposal "{request.proposal_title}".
 Reason: {stance_update.reason}"""
                 
                 try:
