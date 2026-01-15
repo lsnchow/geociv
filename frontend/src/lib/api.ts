@@ -125,5 +125,65 @@ export async function getPersonas(): Promise<{ personas: Array<{ key: string; na
   return request('/personas');
 }
 
+// Adoption - persist decision to agent memory
+import type { AdoptedEvent } from '../types/simulation';
+
+export async function adoptProposal(sessionId: string, event: AdoptedEvent): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>('/ai/adopt', {
+    method: 'POST',
+    body: JSON.stringify({
+      session_id: sessionId,
+      adopted_event: event,
+    }),
+  });
+}
+
+// Direct Messages (agent-to-agent conversations)
+export interface DMRequest {
+  session_id: string;
+  from_agent_key: string;
+  to_agent_key: string;
+  message: string;
+  proposal_title?: string;
+}
+
+export interface StanceUpdate {
+  relationship_delta: number;
+  stance_changed: boolean;
+  new_stance: string | null;
+  new_intensity: number | null;
+  reason: string;
+}
+
+export interface DMResponse {
+  reply: string;
+  stance_update: StanceUpdate;
+  relationship_score: number;
+}
+
+export async function sendDM(dmRequest: DMRequest): Promise<DMResponse> {
+  return request<DMResponse>('/ai/dm', {
+    method: 'POST',
+    body: JSON.stringify(dmRequest),
+  });
+}
+
+// Relationships
+export interface RelationshipEdge {
+  from: string;
+  to: string;
+  score: number;
+  reason?: string;
+}
+
+export interface RelationshipsResponse {
+  session_id: string;
+  edges: RelationshipEdge[];
+}
+
+export async function getRelationships(sessionId: string): Promise<RelationshipsResponse> {
+  return request<RelationshipsResponse>(`/ai/relationships/${sessionId}`);
+}
+
 export { ApiError };
 

@@ -3,9 +3,44 @@ import { Panel, PanelSection, PanelDivider } from '../ui';
 import { ApprovalMeter } from './ApprovalMeter';
 import { DriverList } from './DriverList';
 import { ArchetypeBreakdown } from './ArchetypeBreakdown';
+import { VotingPanel } from './VotingPanel';
 
 export function ResultsPanel() {
-  const { simulationResult, isSimulating, activeProposal } = useCivicStore();
+  const { 
+    simulationResult, 
+    isSimulating, 
+    activeProposal,
+    agentReactions,
+    agentSimulation,
+    isAdopting,
+    adoptProposal,
+    forceForwardProposal,
+  } = useCivicStore();
+  
+  // Get interpreted proposal from agent simulation
+  const interpretedProposal = agentSimulation?.proposal;
+  const sessionId = agentSimulation?.session_id;
+  
+  // Handlers for voting actions
+  const handleAdopt = async () => {
+    if (interpretedProposal && sessionId) {
+      try {
+        await adoptProposal(interpretedProposal, agentReactions, sessionId);
+      } catch (error) {
+        console.error('Adoption failed:', error);
+      }
+    }
+  };
+  
+  const handleForceForward = async () => {
+    if (interpretedProposal && sessionId) {
+      try {
+        await forceForwardProposal(interpretedProposal, agentReactions, sessionId);
+      } catch (error) {
+        console.error('Force forward failed:', error);
+      }
+    }
+  };
   
   if (!activeProposal) {
     return (
@@ -65,6 +100,22 @@ export function ResultsPanel() {
       </PanelSection>
       
       <PanelDivider />
+      
+      {/* Voting Panel - show when we have agent reactions */}
+      {agentReactions.length > 0 && interpretedProposal && (
+        <>
+          <PanelSection>
+            <VotingPanel 
+              reactions={agentReactions}
+              proposal={interpretedProposal}
+              onAdopt={handleAdopt}
+              onForceForward={handleForceForward}
+              isAdopting={isAdopting}
+            />
+          </PanelSection>
+          <PanelDivider />
+        </>
+      )}
       
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">

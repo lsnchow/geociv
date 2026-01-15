@@ -12,7 +12,13 @@ interface Message {
 }
 
 export function AICopilot() {
-  const { scenario, setAgentSimulation, toggleRightPanel, rightPanelOpen } = useCivicStore();
+  const { scenario, setAgentSimulation, toggleRightPanel, rightPanelOpen, speakingAsAgent, setSpeakingAsAgent } = useCivicStore();
+  
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AICopilot:mount',message:'AICopilot scenario state',data:{hasScenario:!!scenario,scenarioId:scenario?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+  }, [scenario]);
+  // #endregion
   
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -69,6 +75,8 @@ export function AICopilot() {
         scenario_id: scenario.id,
         thread_id: threadId || undefined,
         auto_simulate: true,
+        speaker_mode: speakingAsAgent ? 'agent' : 'user',
+        speaker_agent_key: speakingAsAgent?.key,
       });
       
       // Store thread_id for conversation continuity
@@ -154,6 +162,17 @@ export function AICopilot() {
             <span className="text-sm font-medium text-civic-text">CivicSim AI</span>
             {threadId && (
               <Badge variant="default" size="sm">Thread Active</Badge>
+            )}
+            {speakingAsAgent && (
+              <Badge variant="default" size="sm" className="bg-purple-500/20 text-purple-300 border-purple-500/30">
+                {speakingAsAgent.avatar} Speaking as {speakingAsAgent.name}
+                <button 
+                  onClick={() => setSpeakingAsAgent(null)}
+                  className="ml-1 hover:text-white"
+                >
+                  ✕
+                </button>
+              </Badge>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -276,7 +295,9 @@ export function AICopilot() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe a proposal or ask a question..."
+            placeholder={speakingAsAgent 
+              ? `Speak as ${speakingAsAgent.name}...` 
+              : "Describe a proposal or ask a question..."}
             className="flex-1 px-3 py-2 bg-civic-bg border border-civic-border rounded-lg text-civic-text placeholder-civic-text-secondary focus:outline-none focus:border-civic-accent"
             disabled={isProcessing}
             autoFocus

@@ -52,6 +52,9 @@ export interface AIChatOptions {
   thread_id?: string;
   persona?: string;
   auto_simulate?: boolean;
+  // Speaker mode for multi-agent roleplay
+  speaker_mode?: 'user' | 'agent';
+  speaker_agent_key?: string;
 }
 
 /**
@@ -79,6 +82,8 @@ export async function chat(options: AIChatOptions): Promise<SimulationResponse> 
       thread_id: options.thread_id,
       persona: options.persona,
       auto_simulate: options.auto_simulate ?? true,
+      speaker_mode: options.speaker_mode || 'user',
+      speaker_agent_key: options.speaker_agent_key,
     }),
   });
   

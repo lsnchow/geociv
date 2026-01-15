@@ -12,6 +12,7 @@ from app.schemas.multi_agent import (
     ZoneEffect,
 )
 from app.agents.definitions import AGENTS, ZONES
+from app.agents.session_manager import get_session_manager
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ Respond with ONLY valid JSON:
 - zones_most_affected: list of zones you think are most impacted, each with zone_id, effect (support/oppose/neutral), intensity
 - proposed_amendments: 0-3 changes you'd propose to improve it
 
-Available zone_ids: university, north_end, west_kingston, downtown
+Available zone_ids: north_end, university, west_kingston, downtown, industrial, waterfront_west
 
 Respond with JSON only."""
 
@@ -48,8 +49,7 @@ class AgentReactor:
     
     def __init__(self, client: BackboardClient):
         self.client = client
-        self._assistant_id: Optional[str] = None
-        self._agent_threads: dict[str, str] = {}  # agent_key -> thread_id
+        self.session_mgr = get_session_manager()
     
     async def get_all_reactions(
         self,
@@ -59,8 +59,11 @@ class AgentReactor:
         """
         Get reactions from all agents in parallel.
         
+        Uses session_id to maintain thread continuity per agent.
         Returns list of AgentReaction objects.
         """
+        logger.info(f"[REACTOR] Starting reactions for session={session_id}")
+        
         # Run all agent reactions concurrently
         tasks = [
             self._get_agent_reaction(agent, proposal, session_id)
@@ -79,6 +82,7 @@ class AgentReactor:
             else:
                 reactions.append(result)
         
+        logger.info(f"[REACTOR] Completed {len(reactions)} reactions for session={session_id}")
         return reactions
     
     async def _get_agent_reaction(
@@ -89,6 +93,7 @@ class AgentReactor:
     ) -> AgentReaction:
         """Get reaction from a single agent."""
         agent_key = agent["key"]
+        session = self.session_mgr.get_or_create_session(session_id)
         
         # Build affected zones string
         if proposal.location.zone_ids:
@@ -111,40 +116,46 @@ class AgentReactor:
         )
         
         try:
-            # Get or create thread for this agent
-            thread_id = await self._get_agent_thread(agent_key, session_id)
+            # Get or create thread for this agent IN THIS SESSION
+            thread_id = await self._get_agent_thread(agent_key, session)
             
-            # Send to Backboard
+            logger.info(f"[REACTOR] session={session_id} agent={agent_key} thread={thread_id} content_len={len(prompt)}")
+            
+            # Send to Backboard (returns string directly)
             response_text = await self.client.send_message(thread_id, prompt)
+            
+            logger.info(f"[REACTOR] session={session_id} agent={agent_key} response_len={len(response_text)}")
             
             # Parse response
             reaction = self._parse_reaction(response_text, agent)
             return reaction
             
         except BackboardError as e:
-            logger.error(f"[REACTOR] Agent {agent_key} Backboard error: {e}")
+            logger.error(f"[REACTOR] session={session_id} agent={agent_key} Backboard error: {e}")
             return self._fallback_reaction(agent)
         except Exception as e:
-            logger.error(f"[REACTOR] Agent {agent_key} error: {e}")
+            logger.error(f"[REACTOR] session={session_id} agent={agent_key} error: {e}")
             return self._fallback_reaction(agent)
     
-    async def _get_agent_thread(self, agent_key: str, session_id: str) -> str:
-        """Get or create a thread for an agent."""
-        cache_key = f"{session_id}:{agent_key}"
+    async def _get_agent_thread(self, agent_key: str, session) -> str:
+        """Get or create a thread for an agent within a session."""
+        # Check if thread already exists for this agent in this session
+        if agent_key in session.agent_threads:
+            logger.debug(f"[REACTOR] Reusing thread for agent={agent_key}")
+            return session.agent_threads[agent_key]
         
-        if cache_key in self._agent_threads:
-            return self._agent_threads[cache_key]
-        
-        # Ensure assistant exists
-        if not self._assistant_id:
-            self._assistant_id = await self.client.create_assistant(
+        # Ensure reactor assistant exists for this session
+        if not session.reactor_assistant_id:
+            session.reactor_assistant_id = await self.client.create_assistant(
                 name="CivicSim Agent",
                 system_prompt="You are a Kingston resident reacting to civic proposals. Respond in character with valid JSON only."
             )
+            logger.info(f"[REACTOR] Created reactor assistant={session.reactor_assistant_id}")
         
         # Create thread for this agent
-        thread_id = await self.client.create_thread(self._assistant_id)
-        self._agent_threads[cache_key] = thread_id
+        thread_id = await self.client.create_thread(session.reactor_assistant_id)
+        session.agent_threads[agent_key] = thread_id
+        logger.info(f"[REACTOR] Created thread={thread_id} for agent={agent_key} session={session.session_id}")
         
         return thread_id
     

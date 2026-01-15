@@ -10,8 +10,16 @@ import type {
   SpatialProposalType,
   CitywideProposalType
 } from '../types';
-import type { SimulationResponse, ZoneSentiment, AgentReaction, TownHallTranscript } from '../types/simulation';
+import type { SimulationResponse, ZoneSentiment, AgentReaction, TownHallTranscript, AdoptedEvent, InterpretedProposal } from '../types/simulation';
 import * as api from '../lib/api';
+
+// Relationship edge for visualization
+export interface RelationshipEdge {
+  from: string;
+  to: string;
+  score: number;
+  reason?: string;
+}
 
 interface CivicState {
   // Scenario
@@ -36,6 +44,16 @@ interface CivicState {
   agentReactions: AgentReaction[];
   townHall: TownHallTranscript | null;
   selectedZoneId: string | null;
+  
+  // Speaking as agent mode + DM targeting
+  speakingAsAgent: { key: string; name: string; avatar: string } | null;
+  targetAgent: { key: string; name: string } | 'all' | null;
+  relationships: RelationshipEdge[];
+  isSendingDM: boolean;
+  
+  // Adopted proposals
+  adoptedProposals: AdoptedEvent[];
+  isAdopting: boolean;
   
   // History
   history: HistoryEntry[];
@@ -73,6 +91,17 @@ interface CivicState {
   setAgentSimulation: (response: SimulationResponse | null) => void;
   setSelectedZoneId: (zoneId: string | null) => void;
   clearAgentSimulation: () => void;
+  setSpeakingAsAgent: (agent: { key: string; name: string; avatar: string } | null) => void;
+  
+  // DM actions
+  setTargetAgent: (target: { key: string; name: string } | 'all' | null) => void;
+  sendDM: (sessionId: string, message: string, proposalTitle?: string) => Promise<void>;
+  updateAgentReaction: (agentKey: string, updates: Partial<AgentReaction>) => void;
+  loadRelationships: (sessionId: string) => Promise<void>;
+  
+  // Adoption actions
+  adoptProposal: (proposal: InterpretedProposal, reactions: AgentReaction[], sessionId: string) => Promise<void>;
+  forceForwardProposal: (proposal: InterpretedProposal, reactions: AgentReaction[], sessionId: string) => Promise<void>;
 }
 
 // Default proposal values
@@ -113,6 +142,14 @@ export const useCivicStore = create<CivicState>()(
       agentReactions: [],
       townHall: null,
       selectedZoneId: null,
+      speakingAsAgent: null,
+      targetAgent: null,
+      relationships: [],
+      isSendingDM: false,
+      
+      // Adopted proposals
+      adoptedProposals: [],
+      isAdopting: false,
       
       history: [],
       selectedHistoryId: null,
@@ -145,27 +182,45 @@ export const useCivicStore = create<CivicState>()(
       },
       
       seedKingston: async () => {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:seedKingston:start',message:'seedKingston called',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         set({ loadingScenario: true });
         try {
           const scenario = await api.seedKingstonScenario();
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:seedKingston:success',message:'seedKingston succeeded',data:{scenarioId:scenario?.id,scenarioName:scenario?.name},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           set({ scenario });
           get().loadScenarios();
         } catch (error: unknown) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:seedKingston:catch',message:'seedKingston error',data:{errorStatus:(error as api.ApiError)?.status,errorMsg:String(error)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           // 409 = scenario already exists, treat as success
           if ((error as api.ApiError).status === 409) {
             try {
               const scenarios = await api.listScenarios();
               const kingston = scenarios.find(s => s.name === 'Kingston, Ontario');
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:seedKingston:409fallback',message:'409 fallback',data:{foundKingston:!!kingston,kingstonId:kingston?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
               if (kingston) {
                 await get().loadScenario(kingston.id);
               }
             } catch (innerError) {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:seedKingston:409innerError',message:'409 inner fallback failed',data:{innerError:String(innerError)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
               console.error('Failed in 409 fallback:', innerError);
             }
           } else {
             console.error('Failed to seed Kingston:', error);
           }
         } finally {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:seedKingston:finally',message:'seedKingston finally',data:{scenarioAfter:!!get().scenario},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           // Always reset loading state
           set({ loadingScenario: false });
         }
@@ -289,19 +344,201 @@ export const useCivicStore = create<CivicState>()(
       
       setSelectedZoneId: (zoneId) => set({ selectedZoneId: zoneId }),
       
+      setSpeakingAsAgent: (agent) => set({ speakingAsAgent: agent }),
+      
+      // DM actions
+      setTargetAgent: (target) => set({ targetAgent: target }),
+      
+      sendDM: async (sessionId, message, proposalTitle) => {
+        const { speakingAsAgent, targetAgent, agentReactions } = get();
+        if (!speakingAsAgent || !targetAgent || targetAgent === 'all') {
+          console.error('sendDM requires speakingAsAgent and a specific targetAgent');
+          return;
+        }
+        
+        set({ isSendingDM: true });
+        try {
+          const response = await api.sendDM({
+            session_id: sessionId,
+            from_agent_key: speakingAsAgent.key,
+            to_agent_key: targetAgent.key,
+            message,
+            proposal_title: proposalTitle,
+          });
+          
+          // If stance changed, update the reaction
+          if (response.stance_update.stance_changed && response.stance_update.new_stance) {
+            const updatedReactions = agentReactions.map(r => {
+              if (r.agent_key === targetAgent.key) {
+                return {
+                  ...r,
+                  stance: response.stance_update.new_stance as 'support' | 'oppose' | 'neutral',
+                  intensity: response.stance_update.new_intensity ?? r.intensity,
+                  quote: `After talking with ${speakingAsAgent.name}: "${response.stance_update.reason}"`,
+                };
+              }
+              return r;
+            });
+            set({ agentReactions: updatedReactions });
+          }
+          
+          // Update relationships
+          get().loadRelationships(sessionId);
+          
+          set({ isSendingDM: false });
+        } catch (error) {
+          console.error('Failed to send DM:', error);
+          set({ isSendingDM: false });
+          throw error;
+        }
+      },
+      
+      updateAgentReaction: (agentKey, updates) => {
+        set(state => ({
+          agentReactions: state.agentReactions.map(r =>
+            r.agent_key === agentKey ? { ...r, ...updates } : r
+          ),
+        }));
+      },
+      
+      loadRelationships: async (sessionId) => {
+        try {
+          const response = await api.getRelationships(sessionId);
+          set({ relationships: response.edges || [] });
+        } catch (error) {
+          console.warn('Failed to load relationships:', error);
+        }
+      },
+      
       clearAgentSimulation: () => set({
         agentSimulation: null,
         zoneSentiments: [],
         agentReactions: [],
         townHall: null,
         selectedZoneId: null,
+        speakingAsAgent: null,
+        targetAgent: null,
+        relationships: [],
+        isSendingDM: false,
       }),
+      
+      // Adoption actions
+      adoptProposal: async (proposal, reactions, sessionId) => {
+        set({ isAdopting: true });
+        try {
+          // Calculate vote tally
+          const support = reactions.filter(r => r.stance === 'support').length;
+          const oppose = reactions.filter(r => r.stance === 'oppose').length;
+          const neutral = reactions.filter(r => r.stance === 'neutral').length;
+          const totalVotes = support + oppose;
+          const agreementPct = totalVotes > 0 ? Math.round((support / totalVotes) * 100) : 0;
+          
+          // Select 2-4 key quotes (prioritize strong stances)
+          const keyQuotes = reactions
+            .filter(r => r.stance !== 'neutral')
+            .slice(0, 4)
+            .map(r => ({
+              agent_name: r.agent_name,
+              stance: r.stance,
+              quote: r.quote,
+            }));
+          
+          // Get zone deltas from zoneSentiments
+          const { zoneSentiments } = get();
+          const zoneDeltas = zoneSentiments.slice(0, 3).map(z => ({
+            zone_id: z.zone_id,
+            zone_name: z.zone_name,
+            sentiment_shift: z.sentiment === 'support' ? 0.5 : z.sentiment === 'oppose' ? -0.5 : 0,
+          }));
+          
+          // Create adopted event
+          const adoptedEvent: AdoptedEvent = {
+            id: `adopted_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            session_id: sessionId,
+            proposal,
+            outcome: 'adopted',
+            vote_summary: { support, oppose, neutral, agreement_pct: agreementPct },
+            key_quotes: keyQuotes,
+            zone_deltas: zoneDeltas,
+          };
+          
+          // Call backend to persist in agent threads
+          await api.adoptProposal(sessionId, adoptedEvent);
+          
+          // Add to local state
+          set(state => ({
+            adoptedProposals: [...state.adoptedProposals, adoptedEvent],
+            isAdopting: false,
+          }));
+        } catch (error) {
+          console.error('Failed to adopt proposal:', error);
+          set({ isAdopting: false });
+          throw error;
+        }
+      },
+      
+      forceForwardProposal: async (proposal, reactions, sessionId) => {
+        set({ isAdopting: true });
+        try {
+          // Calculate vote tally
+          const support = reactions.filter(r => r.stance === 'support').length;
+          const oppose = reactions.filter(r => r.stance === 'oppose').length;
+          const neutral = reactions.filter(r => r.stance === 'neutral').length;
+          const totalVotes = support + oppose;
+          const agreementPct = totalVotes > 0 ? Math.round((support / totalVotes) * 100) : 0;
+          
+          // Select 2-4 key quotes
+          const keyQuotes = reactions
+            .filter(r => r.stance !== 'neutral')
+            .slice(0, 4)
+            .map(r => ({
+              agent_name: r.agent_name,
+              stance: r.stance,
+              quote: r.quote,
+            }));
+          
+          // Get zone deltas
+          const { zoneSentiments } = get();
+          const zoneDeltas = zoneSentiments.slice(0, 3).map(z => ({
+            zone_id: z.zone_id,
+            zone_name: z.zone_name,
+            sentiment_shift: z.sentiment === 'support' ? 0.5 : z.sentiment === 'oppose' ? -0.5 : 0,
+          }));
+          
+          // Create adopted event (forced)
+          const adoptedEvent: AdoptedEvent = {
+            id: `adopted_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            session_id: sessionId,
+            proposal,
+            outcome: 'forced',
+            vote_summary: { support, oppose, neutral, agreement_pct: agreementPct },
+            key_quotes: keyQuotes,
+            zone_deltas: zoneDeltas,
+          };
+          
+          // Call backend to persist in agent threads
+          await api.adoptProposal(sessionId, adoptedEvent);
+          
+          // Add to local state
+          set(state => ({
+            adoptedProposals: [...state.adoptedProposals, adoptedEvent],
+            isAdopting: false,
+          }));
+        } catch (error) {
+          console.error('Failed to force forward proposal:', error);
+          set({ isAdopting: false });
+          throw error;
+        }
+      },
     }),
     {
       name: 'civicsim-storage',
       partialize: (state) => ({
         history: state.history,
         autoSimulate: state.autoSimulate,
+        adoptedProposals: state.adoptedProposals,
       }),
     }
   )

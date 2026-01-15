@@ -7,6 +7,7 @@ from typing import Optional
 from app.services.backboard_client import BackboardClient, BackboardError
 from app.schemas.multi_agent import InterpretResult, InterpretedProposal, ProposalLocation, ProposalParameters
 from app.agents.definitions import ZONES
+from app.agents.session_manager import get_session_manager
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ INTERPRET_PROMPT = """You are interpreting a civic proposal for Kingston, Ontari
 
 Convert the user's message into a structured proposal. Determine if it's a BUILD action (spatial: parks, housing, transit, etc.) or a POLICY action (citywide: taxes, subsidies, regulations, etc.).
 
-Known Kingston zones: University District, North End, West Kingston, Downtown Core.
+Known Kingston zones: North End, University District, West Kingston, Downtown Core, Industrial Zone, Waterfront West, Sydenham Ward.
 
 Respond with ONLY valid JSON in this exact format:
 - ok: true if interpretation succeeded, false if unclear
@@ -23,7 +24,7 @@ Respond with ONLY valid JSON in this exact format:
 - proposal.title: short title (5-10 words)
 - proposal.summary: one sentence description
 - proposal.location.kind: "none", "zone", "point", or "polygon"
-- proposal.location.zone_ids: list of affected zone IDs if kind="zone" (use: university, north_end, west_kingston, downtown)
+- proposal.location.zone_ids: list of affected zone IDs if kind="zone" (use: north_end, university, west_kingston, downtown, industrial, waterfront_west, sydenham)
 - proposal.parameters.scale: 1.0 default, adjust for "double" (2.0), "small" (0.5), etc.
 - proposal.parameters.budget_millions: if mentioned
 - proposal.parameters.target_group: if targeting specific group (low-income, students, etc.)
@@ -41,49 +42,54 @@ class ProposalInterpreter:
     
     def __init__(self, client: BackboardClient):
         self.client = client
-        self._thread_id: Optional[str] = None
+        self.session_mgr = get_session_manager()
     
     async def interpret(self, message: str, session_id: str) -> InterpretResult:
         """
         Interpret a user message into a structured proposal.
         
+        Uses session_id to maintain thread continuity across calls.
         Returns InterpretResult with parsed proposal or error.
         """
+        session = self.session_mgr.get_or_create_session(session_id)
         prompt = INTERPRET_PROMPT.format(message=message)
         
         try:
-            # Get or create interpreter thread
-            if not self._thread_id:
-                self._thread_id = await self.client.create_thread(
-                    await self._ensure_assistant()
+            # Get or create interpreter thread for THIS SESSION
+            if not session.interpreter_thread_id:
+                if not session.interpreter_assistant_id:
+                    session.interpreter_assistant_id = await self.client.create_assistant(
+                        name="CivicSim Interpreter",
+                        system_prompt="You interpret civic proposals into structured JSON. Always respond with valid JSON only."
+                    )
+                    logger.info(f"[INTERPRETER] Created assistant={session.interpreter_assistant_id}")
+                session.interpreter_thread_id = await self.client.create_thread(
+                    session.interpreter_assistant_id
                 )
+                logger.info(f"[INTERPRETER] Created thread={session.interpreter_thread_id} for session={session_id}")
             
-            # Send to Backboard
-            response_text = await self.client.send_message(self._thread_id, prompt)
+            logger.info(f"[INTERPRETER] session={session_id} thread={session.interpreter_thread_id} content_len={len(prompt)}")
+            
+            # Send to Backboard (returns string directly)
+            response_text = await self.client.send_message(session.interpreter_thread_id, prompt)
+            
+            logger.info(f"[INTERPRETER] session={session_id} response_len={len(response_text)}")
             
             # Parse JSON response
             result = self._parse_response(response_text)
             return result
             
         except BackboardError as e:
-            logger.error(f"[INTERPRETER] Backboard error: {e}")
+            logger.error(f"[INTERPRETER] session={session_id} Backboard error: {e}")
             return InterpretResult(
                 ok=False,
                 error=f"Interpretation failed: {e.body}"
             )
         except Exception as e:
-            logger.error(f"[INTERPRETER] Unexpected error: {e}")
+            logger.error(f"[INTERPRETER] session={session_id} Unexpected error: {e}")
             return InterpretResult(
                 ok=False,
-                error=f"Interpretation failed: {str(e)}"
-            )
-    
-    async def _ensure_assistant(self) -> str:
-        """Get or create the interpreter assistant."""
-        return await self.client.create_assistant(
-            name="CivicSim Interpreter",
-            system_prompt="You interpret civic proposals into structured JSON. Always respond with valid JSON only."
-        )
+                error=f"Interpretation failed: {str(e)}"            )
     
     def _parse_response(self, response_text: str) -> InterpretResult:
         """Parse LLM response into InterpretResult."""

@@ -8,7 +8,16 @@ const STANCE_CONFIG = {
 };
 
 export function AgentReactions() {
-  const { agentReactions, agentSimulation } = useCivicStore();
+  const { 
+    agentReactions, 
+    agentSimulation, 
+    speakingAsAgent, 
+    setSpeakingAsAgent,
+    targetAgent,
+    setTargetAgent,
+    relationships,
+    isSendingDM
+  } = useCivicStore();
   
   if (agentReactions.length === 0) {
     return (
@@ -29,6 +38,31 @@ export function AgentReactions() {
   const opposeCount = agentReactions.filter(r => r.stance === 'oppose').length;
   const neutralCount = agentReactions.length - supportCount - opposeCount;
   
+  // Handle agent card click
+  const handleAgentClick = (reaction: typeof agentReactions[0]) => {
+    const isSpeakingAsThisAgent = speakingAsAgent?.key === reaction.agent_key;
+    
+    if (speakingAsAgent && !isSpeakingAsThisAgent) {
+      // Already speaking as someone else - set as target for DM
+      const isTarget = (targetAgent && targetAgent !== 'all' && targetAgent.key === reaction.agent_key);
+      setTargetAgent(isTarget ? null : { key: reaction.agent_key, name: reaction.agent_name });
+    } else {
+      // Toggle speaking as this agent
+      setSpeakingAsAgent(
+        isSpeakingAsThisAgent ? null : { key: reaction.agent_key, name: reaction.agent_name, avatar: reaction.avatar }
+      );
+      setTargetAgent(null); // Clear target when changing speaker
+    }
+  };
+  
+  // Get relationship score for a pair
+  const getRelationship = (fromKey: string, toKey: string): number | null => {
+    const edge = relationships.find(r => 
+      (r.from === fromKey && r.to === toKey) || (r.from === toKey && r.to === fromKey)
+    );
+    return edge?.score ?? null;
+  };
+  
   return (
     <div className="h-full flex flex-col">
       {/* Summary header */}
@@ -48,15 +82,78 @@ export function AgentReactions() {
         </div>
       )}
       
+      {/* DM mode indicator */}
+      {speakingAsAgent && (
+        <div className="px-4 py-2 bg-purple-500/10 border-b border-purple-500/30">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-purple-400">🎭 Speaking as {speakingAsAgent.name}</span>
+            {targetAgent && targetAgent !== 'all' && (
+              <>
+                <span className="text-civic-text-secondary">→</span>
+                <span className="text-civic-accent">🎯 To: {targetAgent.name}</span>
+              </>
+            )}
+            {isSendingDM && (
+              <span className="text-yellow-400 animate-pulse ml-auto">Sending...</span>
+            )}
+          </div>
+          <p className="text-[10px] text-civic-text-secondary mt-1">
+            Click another agent to send them a direct message
+          </p>
+        </div>
+      )}
+      
+      {/* Relationship tethers summary */}
+      {relationships.length > 0 && (
+        <div className="px-4 py-2 bg-civic-muted/20 border-b border-civic-border">
+          <h4 className="text-[10px] uppercase tracking-wider text-civic-text-secondary mb-2">Relationships</h4>
+          <div className="flex flex-wrap gap-2">
+            {relationships.slice(0, 6).map((rel, i) => {
+              const fromAgent = agentReactions.find(r => r.agent_key === rel.from);
+              const toAgent = agentReactions.find(r => r.agent_key === rel.to);
+              if (!fromAgent || !toAgent) return null;
+              
+              const isPositive = rel.score > 0;
+              return (
+                <div 
+                  key={i} 
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] ${
+                    isPositive ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                  }`}
+                  title={rel.reason}
+                >
+                  <span>{fromAgent.avatar}</span>
+                  <span>{isPositive ? '❤️' : '💔'}</span>
+                  <span>{toAgent.avatar}</span>
+                  <span className="font-mono">{Math.round(rel.score * 100)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      
       {/* Agent reactions list */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {agentReactions.map((reaction) => {
           const config = STANCE_CONFIG[reaction.stance];
+          const isActive = speakingAsAgent?.key === reaction.agent_key;
+          const isTargeted = targetAgent && targetAgent !== 'all' && targetAgent.key === reaction.agent_key;
+          const relationshipScore = speakingAsAgent && !isActive 
+            ? getRelationship(speakingAsAgent.key, reaction.agent_key) 
+            : null;
           
           return (
             <div
               key={reaction.agent_key}
-              className={`p-3 rounded-lg border ${config.borderClass} ${config.bgClass}`}
+              onClick={() => handleAgentClick(reaction)}
+              className={`p-3 rounded-lg border cursor-pointer transition-all ${config.borderClass} ${config.bgClass} ${
+                isActive 
+                  ? 'ring-2 ring-purple-500 ring-offset-2 ring-offset-civic-bg' 
+                  : isTargeted
+                    ? 'ring-2 ring-civic-accent ring-offset-2 ring-offset-civic-bg'
+                    : 'hover:ring-1 hover:ring-civic-border'
+              }`}
             >
               {/* Header */}
               <div className="flex items-center gap-2 mb-2">
@@ -65,6 +162,17 @@ export function AgentReactions() {
                   <span className="text-sm font-medium text-civic-text">
                     {reaction.agent_name}
                   </span>
+                  {isActive && (
+                    <span className="ml-2 text-[10px] text-purple-400">(speaking as)</span>
+                  )}
+                  {isTargeted && (
+                    <span className="ml-2 text-[10px] text-civic-accent">(target)</span>
+                  )}
+                  {relationshipScore !== null && (
+                    <span className={`ml-2 text-[10px] ${relationshipScore > 0 ? 'text-green-400' : relationshipScore < 0 ? 'text-red-400' : 'text-civic-text-secondary'}`}>
+                      {relationshipScore > 0 ? '❤️' : relationshipScore < 0 ? '💔' : '➖'} {Math.round(relationshipScore * 100)}%
+                    </span>
+                  )}
                 </div>
                 <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs ${config.bgClass} ${config.textClass}`}>
                   <span>{config.icon}</span>
@@ -89,6 +197,7 @@ export function AgentReactions() {
                         {concern}
                       </span>
                     ))}
+
                   </div>
                 </div>
               )}

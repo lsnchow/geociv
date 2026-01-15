@@ -1,16 +1,92 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, Component, type ReactNode } from 'react';
 import { Map } from 'react-map-gl/maplibre';
 import DeckGL from '@deck.gl/react';
-import { ScatterplotLayer, TextLayer, PolygonLayer, PathLayer, GeoJsonLayer } from '@deck.gl/layers';
+import { TextLayer, PolygonLayer, GeoJsonLayer } from '@deck.gl/layers';
 import type { PickingInfo } from '@deck.gl/core';
 import { useCivicStore } from '../../store';
 import { ProposalMarker } from './ProposalMarker';
-import { LassoTool, useLassoDrawing, analyzeShape } from './LassoTool';
 import * as aiApi from '../../lib/ai-api';
 import type { ZoneDescription } from '../../types/ai';
 import type { ZoneSentiment } from '../../types/simulation';
 import kingstonZones from '../../data/kingston-zones.json';
 import 'maplibre-gl/dist/maplibre-gl.css';
+
+// ============================================================================
+// Map Error Boundary - catches WebGL/deck.gl errors and shows recovery UI
+// ============================================================================
+interface MapErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class MapErrorBoundary extends Component<{ children: ReactNode; onRetry?: () => void }, MapErrorBoundaryState> {
+  constructor(props: { children: ReactNode; onRetry?: () => void }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<MapErrorBoundaryState> {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    const isWebGLError = 
+      error.message.toLowerCase().includes('webgl') ||
+      error.message.toLowerCase().includes('context') ||
+      error.message.toLowerCase().includes('deck') ||
+      error.message.toLowerCase().includes('gl_');
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MapErrorBoundary:catch',message:'Map caught error',data:{errorMsg:error.message,isWebGLError,stack:errorInfo.componentStack?.slice(0,500)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
+    console.error('[CivicSim] Map render error:', error);
+    console.error('[CivicSim] WebGL related:', isWebGLError);
+    console.error('[CivicSim] Stack:', errorInfo.componentStack);
+  }
+
+  handleRetry = () => {
+    this.setState({ hasError: false, error: null });
+    this.props.onRetry?.();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full bg-civic-bg flex items-center justify-center">
+          <div className="text-center p-8 max-w-md bg-civic-surface border border-civic-border rounded-lg">
+            <div className="text-4xl mb-4">🗺️</div>
+            <h2 className="text-lg font-medium text-civic-text mb-2">Map Render Error</h2>
+            <p className="text-sm text-civic-text-secondary mb-4">
+              The map failed to render. This may be due to a WebGL context loss or graphics driver issue.
+            </p>
+            {this.state.error && (
+              <p className="text-xs font-mono text-civic-oppose mb-4 break-all bg-civic-elevated p-2 rounded">
+                {this.state.error.message}
+              </p>
+            )}
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={this.handleRetry}
+                className="px-4 py-2 bg-civic-accent hover:bg-civic-accent-muted text-white text-sm font-medium rounded transition-colors"
+              >
+                Retry
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-civic-muted hover:bg-civic-border text-civic-text text-sm font-medium rounded transition-colors"
+              >
+                Reload Page
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 // Kingston, Ontario center
 const INITIAL_VIEW_STATE = {
@@ -36,18 +112,21 @@ interface ClusterPoint {
 }
 
 interface MapArenaProps {
-  onLassoComplete?: (path: Array<{ lat: number; lng: number }>, shape: ReturnType<typeof analyzeShape>) => void;
+  // Props removed - lasso no longer used
 }
 
-// Helper to get sentiment color with transparency
+// Helper to get sentiment color with transparency based on consensus
 function getSentimentColor(sentiment: ZoneSentiment | undefined, isHovered: boolean, isSelected: boolean): [number, number, number, number] {
   const alpha = isSelected ? 180 : isHovered ? 140 : 100;
   
   if (!sentiment) return [80, 80, 90, 60]; // Default gray
   
   const score = sentiment.score;
-  if (score > 0.3) return [34, 197, 94, alpha]; // Green for support
-  if (score < -0.3) return [239, 68, 68, alpha]; // Red for oppose
+  // Green: score > 0.15 (net support)
+  // Red: score < -0.15 (net oppose)
+  // Yellow: neutral (-0.15 to 0.15)
+  if (score > 0.15) return [34, 197, 94, alpha]; // Green for support
+  if (score < -0.15) return [239, 68, 68, alpha]; // Red for oppose
   return [251, 191, 36, alpha]; // Yellow for neutral
 }
 
@@ -57,12 +136,12 @@ function getSentimentBorderColor(sentiment: ZoneSentiment | undefined, isSelecte
   if (!sentiment) return [100, 100, 110, 200];
   
   const score = sentiment.score;
-  if (score > 0.3) return [34, 197, 94, 255];
-  if (score < -0.3) return [239, 68, 68, 255];
+  if (score > 0.15) return [34, 197, 94, 255];
+  if (score < -0.15) return [239, 68, 68, 255];
   return [251, 191, 36, 255];
 }
 
-export function MapArena({ onLassoComplete }: MapArenaProps) {
+export function MapArena({}: MapArenaProps) {
   const {
     scenario,
     simulationResult,
@@ -82,9 +161,6 @@ export function MapArena({ onLassoComplete }: MapArenaProps) {
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
   const [zoneDescription, setZoneDescription] = useState<ZoneDescription | null>(null);
   const [isLoadingZone, setIsLoadingZone] = useState(false);
-  
-  // Lasso drawing
-  const lasso = useLassoDrawing();
 
   // Convert clusters to map points with scores
   const clusterPoints: ClusterPoint[] = useMemo(() => {
@@ -200,92 +276,60 @@ export function MapArena({ onLassoComplete }: MapArenaProps) {
     });
   }, [zoneSentiments, hoveredZoneId, selectedZoneId]);
 
-  // Cluster visualization layer (circles for clusters without polygons)
-  const clusterLayer = useMemo(() => {
-    const circleClusters = clusterPoints.filter(c => !c.polygon);
-    if (!circleClusters.length) return null;
-    
-    return new ScatterplotLayer({
-      id: 'clusters',
-      data: circleClusters,
-      pickable: true,
-      opacity: 0.8,
-      stroked: true,
-      filled: true,
-      radiusScale: 100,
-      radiusMinPixels: 20,
-      radiusMaxPixels: 60,
-      lineWidthMinPixels: 1,
-      getPosition: (d: ClusterPoint) => d.position,
-      getRadius: (d: ClusterPoint) => Math.sqrt(d.population) * 2,
-      getFillColor: (d: ClusterPoint) => {
-        if (d.score === undefined) return [50, 50, 55, 180];
-        if (d.score > 20) return [34, 197, 94, Math.min(255, 100 + Math.abs(d.score) * 1.5)];
-        if (d.score < -20) return [239, 68, 68, Math.min(255, 100 + Math.abs(d.score) * 1.5)];
-        return [113, 113, 122, 150];
-      },
-      getLineColor: (d: ClusterPoint) => {
-        const isSelected = d.id === selectedZoneId;
-        if (isSelected) return [96, 165, 250];
-        if (d.score === undefined) return [63, 63, 70];
-        if (d.score > 20) return [34, 197, 94];
-        if (d.score < -20) return [239, 68, 68];
-        return [113, 113, 122];
-      },
-      getLineWidth: (d: ClusterPoint) => d.id === selectedZoneId ? 3 : 1,
-      updateTriggers: {
-        getFillColor: [simulationResult],
-        getLineColor: [simulationResult, selectedZoneId],
-        getLineWidth: [selectedZoneId],
-      },
+  // Zone name labels (visible at certain zoom levels)
+  const zoneLabelLayer = useMemo(() => {
+    // Calculate centroid for each zone polygon
+    const labelData = kingstonZones.features.map(feature => {
+      const coords = feature.geometry.coordinates[0] as number[][];
+      // Simple centroid calculation
+      const centroid = coords.reduce(
+        (acc, coord) => [acc[0] + coord[0], acc[1] + coord[1]],
+        [0, 0]
+      );
+      const n = coords.length;
+      
+      const sentiment = zoneSentiments.find(z => z.zone_id === feature.properties.id);
+      const scoreText = sentiment 
+        ? (sentiment.score > 0 ? '+' : '') + (sentiment.score * 100).toFixed(0) + '%'
+        : '';
+      
+      return {
+        id: feature.properties.id,
+        name: feature.properties.name,
+        position: [centroid[0] / n, centroid[1] / n] as [number, number],
+        scoreText,
+        sentiment,
+      };
     });
-  }, [clusterPoints, simulationResult, selectedZoneId]);
 
-  // Cluster labels
-  const labelLayer = useMemo(() => {
-    if (!clusterPoints.length) return null;
-    
     return new TextLayer({
-      id: 'cluster-labels',
-      data: clusterPoints,
+      id: 'zone-labels',
+      data: labelData,
       pickable: false,
-      getPosition: (d: ClusterPoint) => d.position,
-      getText: (d: ClusterPoint) => {
-        const label = d.aiLabel || d.name;
-        if (d.score !== undefined) {
-          return `${label}\n${d.score > 0 ? '+' : ''}${d.score.toFixed(0)}`;
+      getPosition: (d: typeof labelData[0]) => d.position,
+      getText: (d: typeof labelData[0]) => {
+        // Show name + score at higher zoom, just name at lower zoom
+        if (viewState.zoom >= 12.5 && d.scoreText) {
+          return `${d.name}\n${d.scoreText}`;
         }
-        return label;
+        return d.name;
       },
-      getSize: 11,
-      getColor: [250, 250, 250],
+      getSize: viewState.zoom >= 13 ? 14 : viewState.zoom >= 12 ? 12 : 10,
+      getColor: [250, 250, 250, 220],
       getTextAnchor: 'middle',
       getAlignmentBaseline: 'center',
       fontFamily: 'Inter, system-ui, sans-serif',
-      fontWeight: 500,
+      fontWeight: 600,
+      outlineWidth: 2,
+      outlineColor: [0, 0, 0, 180],
+      // Only show labels at zoom >= 11
+      visible: viewState.zoom >= 11,
       updateTriggers: {
-        getText: [simulationResult],
+        getText: [zoneSentiments, viewState.zoom],
+        getSize: [viewState.zoom],
       },
     });
-  }, [clusterPoints, simulationResult]);
-
-  // Lasso drawing layer
-  const lassoLayer = useMemo(() => {
-    if (!lasso.isDrawing || lasso.path.length < 2) return null;
-    
-    const pathData = lasso.path.map(p => [p.lng, p.lat]);
-    
-    return new PathLayer({
-      id: 'lasso-path',
-      data: [{ path: pathData }],
-      pickable: false,
-      widthMinPixels: 2,
-      // @ts-expect-error - PathLayer types are overly strict
-      getPath: (d: { path: number[][] }) => d.path,
-      getColor: [96, 165, 250, 200],
-      getDashArray: [4, 2],
-    });
-  }, [lasso.isDrawing, lasso.path]);
+  }, [zoneSentiments, viewState.zoom]);
 
   // Fetch zone description
   const fetchZoneDescription = useCallback(async (clusterId: string) => {
@@ -315,12 +359,6 @@ export function MapArena({ onLassoComplete }: MapArenaProps) {
     
     const [lng, lat] = info.coordinate;
     
-    // If lasso is active, add point
-    if (lasso.isDrawing) {
-      lasso.addPoint(lat, lng);
-      return;
-    }
-    
     // If clicking on a sentiment zone (from multi-agent simulation)
     if (info.object && info.layer?.id === 'sentiment-zones') {
       const props = (info.object as { properties: { id: string } }).properties;
@@ -346,20 +384,7 @@ export function MapArena({ onLassoComplete }: MapArenaProps) {
     if (activeProposal?.type === 'spatial' || draggedCard?.type === 'spatial') {
       setProposalPosition({ lat, lng });
     }
-  }, [activeProposal, draggedCard, setProposalPosition, lasso, selectedZoneId, setSelectedZoneId, fetchZoneDescription]);
-
-  // Handle lasso toggle
-  const handleLassoToggle = useCallback(() => {
-    if (lasso.isDrawing) {
-      const path = lasso.finishDrawing();
-      if (path.length >= 3 && onLassoComplete) {
-        const shape = analyzeShape(path);
-        onLassoComplete(path, shape);
-      }
-    } else {
-      lasso.startDrawing();
-    }
-  }, [lasso, onLassoComplete]);
+  }, [activeProposal, draggedCard, setProposalPosition, selectedZoneId, setSelectedZoneId, fetchZoneDescription]);
 
   // Handle drag over for drop zone
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -397,11 +422,10 @@ export function MapArena({ onLassoComplete }: MapArenaProps) {
     // Add sentiment zones first (below other layers)
     if (sentimentZoneLayer) result.push(sentimentZoneLayer);
     if (polygonLayer) result.push(polygonLayer);
-    if (clusterLayer) result.push(clusterLayer);
-    if (labelLayer) result.push(labelLayer);
-    if (lassoLayer) result.push(lassoLayer);
+    // Zone labels on top
+    if (zoneLabelLayer) result.push(zoneLabelLayer);
     return result;
-  }, [sentimentZoneLayer, polygonLayer, clusterLayer, labelLayer, lassoLayer]);
+  }, [sentimentZoneLayer, polygonLayer, zoneLabelLayer]);
 
   return (
     <div 
@@ -409,29 +433,28 @@ export function MapArena({ onLassoComplete }: MapArenaProps) {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      <DeckGL
-        viewState={viewState}
-        onViewStateChange={({ viewState: vs }) => setViewState(vs as typeof viewState)}
-        controller={true}
-        layers={layers}
-        onClick={handleMapClick}
-        onHover={setHoverInfo}
-        getCursor={({ isDragging: d }) => {
-          if (lasso.isDrawing) return 'crosshair';
-          if (d) return 'grabbing';
-          if (isDragging) return 'copy';
-          return 'grab';
-        }}
-      >
-        <Map mapStyle={MAP_STYLE} />
-      </DeckGL>
-      
-      {/* Lasso tool */}
-      <LassoTool
-        isActive={lasso.isDrawing}
-        onToggle={handleLassoToggle}
-        onComplete={() => {}}
-      />
+      <MapErrorBoundary>
+        <DeckGL
+          viewState={viewState}
+          onViewStateChange={({ viewState: vs }) => setViewState(vs as typeof viewState)}
+          controller={true}
+          layers={layers}
+          onClick={handleMapClick}
+          onHover={setHoverInfo}
+          onError={(error) => {
+            console.error('[CivicSim] DeckGL/WebGL error:', error);
+            // Log additional context for debugging
+            console.error('[CivicSim] Active layers:', layers.map(l => l?.id).filter(Boolean));
+          }}
+          getCursor={({ isDragging: d }) => {
+            if (d) return 'grabbing';
+            if (isDragging) return 'copy';
+            return 'grab';
+          }}
+        >
+          <Map mapStyle={MAP_STYLE} />
+        </DeckGL>
+      </MapErrorBoundary>
       
       {/* Proposal marker overlay */}
       {proposalPosition && activeProposal?.type === 'spatial' && (
@@ -622,7 +645,10 @@ export function MapArena({ onLassoComplete }: MapArenaProps) {
             {(hoverInfo.object as ClusterPoint).aiLabel || (hoverInfo.object as ClusterPoint).name}
           </div>
           <div className="text-civic-text-secondary">
-            Pop: {(hoverInfo.object as ClusterPoint).population.toLocaleString()}
+            Pop:{' '}
+            {typeof (hoverInfo.object as ClusterPoint).population === 'number'
+              ? (hoverInfo.object as ClusterPoint).population.toLocaleString()
+              : 'n/a'}
           </div>
           {(hoverInfo.object as ClusterPoint).score !== undefined && (
             <div className={`font-mono ${

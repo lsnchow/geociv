@@ -16,7 +16,6 @@ export function ProposalPalette() {
   } = useCivicStore();
   
   const [draggedItem, setDraggedItem] = useState<ProposalCardType | null>(null);
-  const [filter, setFilter] = useState<'all' | 'build' | 'policy'>('all');
   
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -26,12 +25,8 @@ export function ProposalPalette() {
     })
   );
   
-  const filteredCards = PROPOSAL_CARDS.filter(card => 
-    filter === 'all' || card.category === filter
-  );
-  
-  const buildCards = filteredCards.filter(c => c.category === 'build');
-  const policyCards = filteredCards.filter(c => c.category === 'policy');
+  // Only show build cards (spatial proposals)
+  const buildCards = PROPOSAL_CARDS.filter(c => c.category === 'build');
   
   const handleDragStart = (event: DragStartEvent) => {
     const card = PROPOSAL_CARDS.find(c => c.id === event.active.id);
@@ -64,71 +59,22 @@ export function ProposalPalette() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <Panel title="Proposals" className="h-full flex flex-col">
-        {/* Filter tabs */}
-        <PanelSection className="border-b border-civic-border pb-3">
-          <div className="flex gap-1 bg-civic-bg rounded-md p-0.5">
-            {(['all', 'build', 'policy'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`flex-1 text-xs py-1.5 px-3 rounded transition-colors ${
-                  filter === f 
-                    ? 'bg-civic-elevated text-civic-text' 
-                    : 'text-civic-text-secondary hover:text-civic-text'
-                }`}
-              >
-                {f === 'all' ? 'All' : f === 'build' ? '🏗️ Build' : '📋 Policy'}
-              </button>
-            ))}
-          </div>
-        </PanelSection>
-        
+      <Panel title="Build" className="h-full flex flex-col">
         {/* Scrollable card list */}
         <div className="flex-1 overflow-y-auto">
-          {/* Build section */}
-          {(filter === 'all' || filter === 'build') && buildCards.length > 0 && (
-            <div className="p-3">
-              {filter === 'all' && (
-                <h4 className="text-[10px] uppercase tracking-wider text-civic-text-secondary mb-2">
-                  Build
-                </h4>
-              )}
-              <div className="grid grid-cols-2 gap-2">
-                {buildCards.map(card => (
-                  <DraggableCard 
-                    key={card.id} 
-                    card={card}
-                    isActive={activeProposal?.type === 'spatial' && 
-                      activeProposal.spatial_type === card.subtype}
-                    onClick={() => handleCardClick(card)}
-                  />
-                ))}
-              </div>
+          <div className="p-3">
+            <div className="grid grid-cols-2 gap-2">
+              {buildCards.map(card => (
+                <DraggableCard 
+                  key={card.id} 
+                  card={card}
+                  isActive={activeProposal?.type === 'spatial' && 
+                    activeProposal.spatial_type === card.subtype}
+                  onClick={() => handleCardClick(card)}
+                />
+              ))}
             </div>
-          )}
-          
-          {/* Policy section */}
-          {(filter === 'all' || filter === 'policy') && policyCards.length > 0 && (
-            <div className="p-3 pt-0">
-              {filter === 'all' && (
-                <h4 className="text-[10px] uppercase tracking-wider text-civic-text-secondary mb-2 mt-3">
-                  Policy
-                </h4>
-              )}
-              <div className="grid grid-cols-2 gap-2">
-                {policyCards.map(card => (
-                  <DraggableCard 
-                    key={card.id} 
-                    card={card}
-                    isActive={activeProposal?.type === 'citywide' && 
-                      activeProposal.citywide_type === card.subtype}
-                    onClick={() => handleCardClick(card)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
         
         {/* Help text */}
