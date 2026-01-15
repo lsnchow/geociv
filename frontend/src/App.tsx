@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Component, type ReactNode } from 'react';
 import { useCivicStore } from './store';
 import { Header } from './components/layout';
-import { MapArena, analyzeShape } from './components/map';
+import { MapArena } from './components/map';
 import { ProposalPalette } from './components/palette';
 import { ResultsPanel } from './components/results';
 import { ProposalEditor } from './components/editor';
@@ -11,8 +11,73 @@ import { VariantGrid } from './components/variants';
 import { TownHallPanel, TownHallTranscript as TownHallTranscriptComponent, AgentReactions } from './components/townhall';
 import { AIFooter } from './components/footer';
 import type { VariantBundle, TownHallTranscript as TownHallTranscriptType, RankedVariant } from './types/ai';
-import type { Proposal, SpatialProposal } from './types';
+import type { Proposal } from './types';
 import * as aiApi from './lib/ai-api';
+
+// #region agent log
+// Global error handler for unhandled errors
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'window:error',message:'Unhandled global error',data:{errorMsg:event.message,filename:event.filename,lineno:event.lineno,colno:event.colno},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'window:unhandledrejection',message:'Unhandled promise rejection',data:{reason:String(event.reason)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+  });
+}
+// #endregion
+
+// Global App Error Boundary
+interface AppErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, AppErrorBoundaryState> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<AppErrorBoundaryState> {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppErrorBoundary:catch',message:'App caught fatal error',data:{errorMsg:error.message,stack:errorInfo.componentStack?.slice(0,800)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    console.error('[CivicSim] Fatal app error:', error);
+    console.error('[CivicSim] Stack:', errorInfo.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#0a0a0b] text-[#fafafa] flex items-center justify-center p-8">
+          <div className="text-center max-w-lg bg-[#111113] border border-[#27272a] rounded-lg p-8">
+            <div className="text-5xl mb-4">⚠️</div>
+            <h1 className="text-xl font-bold mb-2">Application Error</h1>
+            <p className="text-[#a1a1aa] mb-4">
+              Something went wrong. Please reload the page to continue.
+            </p>
+            {this.state.error && (
+              <p className="text-xs font-mono text-[#ef4444] mb-4 break-all bg-[#18181b] p-3 rounded text-left">
+                {this.state.error.message}
+              </p>
+            )}
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-2 bg-[#3b82f6] hover:bg-[#1d4ed8] text-white font-medium rounded transition-colors"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   const { 
@@ -24,7 +89,14 @@ function App() {
     seedKingston,
     setActiveProposal,
     runSimulation,
+    loadingScenario,
   } = useCivicStore();
+
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:render',message:'App render state',data:{hasScenario:!!scenario,scenarioId:scenario?.id,loadingScenario,leftPanelOpen,rightPanelOpen},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A-B'})}).catch(()=>{});
+  }, [scenario, loadingScenario, leftPanelOpen, rightPanelOpen]);
+  // #endregion
 
   // AI-Max state
   const [variantBundle, setVariantBundle] = useState<VariantBundle | null>(null);
@@ -87,31 +159,7 @@ function App() {
   };
   void handleProposalCompiled;
 
-  // Handle lasso complete
-  const handleLassoComplete = useCallback(async (
-    _path: Array<{ lat: number; lng: number }>,
-    shape: ReturnType<typeof analyzeShape>
-  ) => {
-    if (!scenario) return;
-    
-    // Create a proposal suggestion based on the lasso shape
-    const suggestedType = shape.isCorridor ? 'bike_lane' : 'park';
-    const proposal: SpatialProposal = {
-      type: 'spatial',
-      spatial_type: suggestedType,
-      title: `New ${shape.isCorridor ? 'Bike Lane' : 'Park'} (drawn)`,
-      latitude: shape.centerLat,
-      longitude: shape.centerLng,
-      radius_km: 0.5,
-      scale: 1.0,
-    };
-    
-    setActiveProposal(proposal);
-    setActiveAIFeatures(prev => [...new Set([...prev, 'lasso'])]);
-    
-    // Run simulation
-    setTimeout(() => runSimulation(), 100);
-  }, [scenario, setActiveProposal, runSimulation]);
+  // Lasso feature removed - use AI proposals instead
 
   // Handle cross-examine in town hall
   const handleCrossExamine = useCallback(async (speakerArchetype: string, question: string) => {
@@ -198,7 +246,7 @@ function App() {
         
         {/* Map Arena - Center */}
         <div className="flex-1 relative">
-          <MapArena onLassoComplete={handleLassoComplete} />
+          <MapArena />
           
           {/* AI Copilot (floating command bar) */}
           <AICopilot />
@@ -344,4 +392,13 @@ function App() {
   );
 }
 
-export default App;
+// Wrap App with error boundary
+function WrappedApp() {
+  return (
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
+  );
+}
+
+export default WrappedApp;

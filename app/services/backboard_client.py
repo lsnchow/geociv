@@ -74,7 +74,13 @@ class BackboardClient:
         print(f"[BB] OK thread_id={thread_id}")
         return thread_id
     
-    async def send_message(self, thread_id: str, content: str) -> str:
+    async def send_message(
+        self, 
+        thread_id: str, 
+        content: str,
+        model: str = "gemini-2.5-flash",
+        provider: str = "google",
+    ) -> str:
         """Send message to thread. Returns assistant response text."""
         if not content or not content.strip():
             raise BackboardError(400, "Message content cannot be empty")
@@ -85,9 +91,11 @@ class BackboardClient:
             "content": content,
             "stream": "false",
             "memory": "Auto",
+            "model": model,
+            "provider": provider,
         }
         
-        print(f"[BB] POST {url} | content_len={len(content)}")
+        print(f"[BB] POST {url} | model={model} provider={provider} content_len={len(content)}")
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(url, headers=self.headers, data=form_data)

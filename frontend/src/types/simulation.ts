@@ -26,6 +26,38 @@ export interface InterpretedProposal {
 }
 
 // =============================================================================
+// Adopted Event (compact summary for memory)
+// =============================================================================
+
+export interface AdoptedQuote {
+  agent_name: string;
+  stance: 'support' | 'oppose' | 'neutral';
+  quote: string;
+}
+
+export interface ZoneDelta {
+  zone_id: string;
+  zone_name: string;
+  sentiment_shift: number;  // -1 to +1
+}
+
+export interface AdoptedEvent {
+  id: string;
+  timestamp: string;
+  session_id: string;
+  proposal: InterpretedProposal;
+  outcome: 'adopted' | 'forced';
+  vote_summary: {
+    support: number;
+    oppose: number;
+    neutral: number;
+    agreement_pct: number;
+  };
+  key_quotes: AdoptedQuote[];  // 2-4 representative quotes
+  zone_deltas: ZoneDelta[];    // which zones shifted most
+}
+
+// =============================================================================
 // Agent Reaction
 // =============================================================================
 

@@ -5,28 +5,46 @@ from typing import Optional
 # Kingston Zones (matching the GeoJSON)
 ZONES = [
     {
-        "id": "university",
-        "name": "University District",
-        "description": "Queen's University area, student housing, academic institutions",
-        "demographics": "Students, academics, young professionals",
-    },
-    {
         "id": "north_end",
         "name": "North End",
         "description": "Residential neighborhoods, families, parks",
         "demographics": "Families, retirees, middle-income homeowners",
     },
     {
+        "id": "university",
+        "name": "University District",
+        "description": "Queen's University area, student housing, academic institutions",
+        "demographics": "Students, academics, young professionals",
+    },
+    {
         "id": "west_kingston",
         "name": "West Kingston",
         "description": "Suburban residential, newer developments",
-        "demographics": "Young families, commuters, homeowners",
+        "demographics": "Young families, commuters, developers",
     },
     {
         "id": "downtown",
         "name": "Downtown Core",
         "description": "Historic downtown, businesses, restaurants, waterfront",
         "demographics": "Business owners, tourists, urban renters",
+    },
+    {
+        "id": "industrial",
+        "name": "Industrial Zone",
+        "description": "Industrial facilities, warehouses, manufacturing",
+        "demographics": "Factory workers, logistics companies, planners",
+    },
+    {
+        "id": "waterfront_west",
+        "name": "Waterfront West",
+        "description": "Waterfront neighborhoods, mixed-use development, housing",
+        "demographics": "Advocates, mixed-income residents, renters",
+    },
+    {
+        "id": "sydenham",
+        "name": "Sydenham Ward",
+        "description": "Historic working-class neighborhood, community organizing hub, progressive activism",
+        "demographics": "Activists, community organizers, renters, low-income families",
     },
 ]
 
@@ -37,8 +55,8 @@ AGENTS = [
         "name": "Margaret Chen",
         "role": "Suburban Homeowner",
         "avatar": "🏠",
-        "zone_affiliation": "west_kingston",
-        "persona": """You are Margaret Chen, a 52-year-old homeowner in West Kingston. 
+        "zone_affiliation": "north_end",
+        "persona": """You are Margaret Chen, a 52-year-old homeowner in North End. 
 You've lived in your house for 18 years and raised two children here. You're fiscally conservative, 
 care deeply about property values, neighborhood safety, and keeping taxes low. You're skeptical of 
 rapid development and worry about traffic and parking. You attend city council meetings regularly.
@@ -100,8 +118,8 @@ Your concerns: parking restrictions, tax increases, competition, red tape.""",
         "name": "Jasmine Thompson",
         "role": "Housing Advocate",
         "avatar": "🏘️",
-        "zone_affiliation": None,  # Citywide
-        "persona": """You are Jasmine Thompson, a 35-year-old housing advocate who runs a local nonprofit. 
+        "zone_affiliation": "waterfront_west",
+        "persona": """You are Jasmine Thompson, a 35-year-old housing advocate who runs a local nonprofit in Waterfront West. 
 You've spent 10 years fighting for affordable housing, tenant rights, and homeless services in Kingston. 
 You believe housing is a human right and are frustrated by NIMBYism blocking needed developments. 
 You push for inclusionary zoning, rent control, and more social housing.
@@ -121,8 +139,8 @@ Your concerns: gentrification, exclusionary zoning, developer greed, displacemen
         "name": "Robert Sterling",
         "role": "Real Estate Developer",
         "avatar": "🏗️",
-        "zone_affiliation": None,  # Citywide
-        "persona": """You are Robert Sterling, a 58-year-old real estate developer who has built 
+        "zone_affiliation": "west_kingston",
+        "persona": """You are Robert Sterling, a 58-year-old real estate developer focused on West Kingston who has built 
 condos and commercial properties in Kingston for 30 years. You're pragmatic and profit-focused 
 but understand the need to work with the community. You want fewer regulations, faster approvals, 
 and more density allowances. You think the free market solves housing better than government.
@@ -142,8 +160,8 @@ Your concerns: NIMBYism, slow approvals, inclusionary zoning mandates, parking m
         "name": "Sarah Mitchell",
         "role": "City Planner",
         "avatar": "📋",
-        "zone_affiliation": None,  # Citywide
-        "persona": """You are Sarah Mitchell, a 44-year-old senior city planner with 20 years experience. 
+        "zone_affiliation": "industrial",
+        "persona": """You are Sarah Mitchell, a 44-year-old senior city planner with 20 years experience, currently overseeing the Industrial Zone. 
 You try to balance competing interests: growth vs preservation, density vs neighborhood character, 
 environment vs economy. You believe in evidence-based planning, community engagement, and long-term 
 thinking. You're often the voice of reason but get frustrated when politics overrides good planning.
@@ -157,6 +175,31 @@ Your concerns: short-term thinking, political interference, underfunding, polari
             "environment": 0.7,
             "equity": 0.7,
             "governance": 0.8,
+        },
+    },
+    {
+        "key": "progressive",
+        "name": "Malik Johnson",
+        "role": "Climate Justice Organizer",
+        "avatar": "✊",
+        "zone_affiliation": "sydenham",
+        "persona": """You are Malik Johnson, a 29-year-old climate justice organizer based in Sydenham Ward. 
+You moved to Kingston 5 years ago after organizing tenant unions in Toronto. You believe housing is a 
+human right, climate action must center equity, and transit should be free. You're skeptical of 
+market-based solutions and push for bold public investment. You organize mutual aid networks and 
+protest extractive development. You think incrementalism is too slow for the climate crisis.
+
+Your priorities: housing as a right, climate-first policy, free transit, wealth redistribution, 
+community land trusts, defunding police to fund social services, indigenous land back.
+Your concerns: greenwashing, luxury development, car dependency, austerity, corporate influence.""",
+        "priority_weights": {
+            "affordability": 1.0,
+            "housing_supply": 0.9,
+            "mobility": 0.9,
+            "environment": 1.0,
+            "equity": 1.0,
+            "economic_vitality": -0.2,  # Skeptical of growth-first
+            "governance": 0.4,  # Skeptical of institutions
         },
     },
 ]

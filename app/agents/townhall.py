@@ -11,6 +11,7 @@ from app.schemas.multi_agent import (
     TownHallTranscript,
     TranscriptTurn,
 )
+from app.agents.session_manager import get_session_manager
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,7 @@ class TownHallGenerator:
     
     def __init__(self, client: BackboardClient):
         self.client = client
-        self._assistant_id: Optional[str] = None
-        self._thread_id: Optional[str] = None
+        self.session_mgr = get_session_manager()
     
     async def generate(
         self,
@@ -55,7 +55,11 @@ class TownHallGenerator:
     ) -> TownHallTranscript:
         """
         Generate a town hall transcript from agent reactions.
+        
+        Uses session_id to maintain thread continuity.
         """
+        session = self.session_mgr.get_or_create_session(session_id)
+        
         # Build reactions summary
         reactions_summary = self._format_reactions(reactions)
         
@@ -67,27 +71,33 @@ class TownHallGenerator:
         )
         
         try:
-            # Get or create thread
-            if not self._thread_id:
-                if not self._assistant_id:
-                    self._assistant_id = await self.client.create_assistant(
+            # Get or create thread for THIS SESSION
+            if not session.townhall_thread_id:
+                if not session.townhall_assistant_id:
+                    session.townhall_assistant_id = await self.client.create_assistant(
                         name="CivicSim Town Hall",
                         system_prompt="You moderate town hall meetings and generate realistic debate transcripts. Respond with valid JSON only."
                     )
-                self._thread_id = await self.client.create_thread(self._assistant_id)
+                    logger.info(f"[TOWNHALL] Created assistant={session.townhall_assistant_id}")
+                session.townhall_thread_id = await self.client.create_thread(session.townhall_assistant_id)
+                logger.info(f"[TOWNHALL] Created thread={session.townhall_thread_id} for session={session_id}")
             
-            # Send to Backboard
-            response_text = await self.client.send_message(self._thread_id, prompt)
+            logger.info(f"[TOWNHALL] session={session_id} thread={session.townhall_thread_id} content_len={len(prompt)}")
+            
+            # Send to Backboard (returns string directly)
+            response_text = await self.client.send_message(session.townhall_thread_id, prompt)
+            
+            logger.info(f"[TOWNHALL] session={session_id} response_len={len(response_text)}")
             
             # Parse response
             transcript = self._parse_transcript(response_text, reactions)
             return transcript
             
         except BackboardError as e:
-            logger.error(f"[TOWNHALL] Backboard error: {e}")
+            logger.error(f"[TOWNHALL] session={session_id} Backboard error: {e}")
             return self._fallback_transcript(proposal, reactions)
         except Exception as e:
-            logger.error(f"[TOWNHALL] Error: {e}")
+            logger.error(f"[TOWNHALL] session={session_id} Error: {e}")
             return self._fallback_transcript(proposal, reactions)
     
     def _format_reactions(self, reactions: list[AgentReaction]) -> str:
