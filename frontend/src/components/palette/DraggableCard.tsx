@@ -1,6 +1,5 @@
-import { useDraggable } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
 import { ProposalCard } from './ProposalCard';
+import { useCivicStore } from '../../store';
 import type { ProposalCard as ProposalCardType } from '../../types';
 
 interface DraggableCardProps {
@@ -10,22 +9,33 @@ interface DraggableCardProps {
 }
 
 export function DraggableCard({ card, isActive, onClick }: DraggableCardProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: card.id,
-    data: card,
-  });
-  
-  const style = transform ? {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.5 : 1,
-  } : undefined;
-  
+  const { setDraggedCard, setIsDragging } = useCivicStore();
+  const enableDndDebug = import.meta.env.DEV;
+
+  const handleNativeDragStart = (event: React.DragEvent<HTMLDivElement>) => {
+    const payload = JSON.stringify({ cardId: card.id });
+    event.dataTransfer.setData('text/plain', payload);
+    event.dataTransfer.effectAllowed = 'copy';
+    setDraggedCard(card);
+    setIsDragging(true);
+    if (enableDndDebug) {
+      console.log('dragstart payload', payload, event.dataTransfer.types);
+    }
+  };
+
+  const handleNativeDragEnd = () => {
+    setIsDragging(false);
+    setDraggedCard(null);
+    if (enableDndDebug) {
+      console.log('dragend');
+    }
+  };
+
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
+      draggable
+      onDragStart={handleNativeDragStart}
+      onDragEnd={handleNativeDragEnd}
     >
       <ProposalCard 
         card={card} 

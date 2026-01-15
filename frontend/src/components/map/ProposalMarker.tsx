@@ -4,6 +4,7 @@ interface ProposalMarkerProps {
   position: { lat: number; lng: number };
   proposal: SpatialProposal;
   viewState: { latitude: number; longitude: number; zoom: number };
+  screenPosition: { x: number; y: number };
 }
 
 // Proposal type to icon mapping
@@ -18,7 +19,7 @@ const PROPOSAL_ICONS: Record<string, string> = {
   factory: '🏭',
 };
 
-export function ProposalMarker({ position, proposal, viewState }: ProposalMarkerProps) {
+export function ProposalMarker({ position, proposal, viewState, screenPosition }: ProposalMarkerProps) {
   // Calculate radius in pixels (approximate)
   const radiusKm = proposal.radius_km || 0.5;
   const metersPerPixel = 156543.03392 * Math.cos(position.lat * Math.PI / 180) / Math.pow(2, viewState.zoom);
@@ -33,8 +34,8 @@ export function ProposalMarker({ position, proposal, viewState }: ProposalMarker
     <div 
       className="absolute pointer-events-none"
       style={{
-        left: '50%',
-        top: '50%',
+        left: `${screenPosition.x}px`,
+        top: `${screenPosition.y}px`,
         transform: 'translate(-50%, -50%)',
       }}
     >

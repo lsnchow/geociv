@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState, Component, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef, Component, type ReactNode } from 'react';
 import { Map } from 'react-map-gl/maplibre';
 import DeckGL from '@deck.gl/react';
 import { TextLayer, PolygonLayer, GeoJsonLayer } from '@deck.gl/layers';
+import { WebMercatorViewport } from '@deck.gl/core';
 import type { PickingInfo } from '@deck.gl/core';
-import { useCivicStore } from '../../store';
+import { useCivicStore, PROPOSAL_CARDS, createProposalFromCard } from '../../store';
 import { ProposalMarker } from './ProposalMarker';
 import * as aiApi from '../../lib/ai-api';
 import type { ZoneDescription } from '../../types/ai';
@@ -150,17 +151,23 @@ export function MapArena({}: MapArenaProps) {
     isDragging,
     draggedCard,
     setProposalPosition,
+    setActiveProposal,
     setIsDragging,
+    setDraggedCard,
     zoneSentiments,
     selectedZoneId,
     setSelectedZoneId,
   } = useCivicStore();
   
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
+  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [hoverInfo, setHoverInfo] = useState<PickingInfo | null>(null);
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
   const [zoneDescription, setZoneDescription] = useState<ZoneDescription | null>(null);
   const [isLoadingZone, setIsLoadingZone] = useState(false);
+  const [isDropActive, setIsDropActive] = useState(false);
+  const enableDndDebug = import.meta.env.DEV;
 
   // Convert clusters to map points with scores
   const clusterPoints: ClusterPoint[] = useMemo(() => {
@@ -387,35 +394,170 @@ export function MapArena({}: MapArenaProps) {
   }, [activeProposal, draggedCard, setProposalPosition, selectedZoneId, setSelectedZoneId, fetchZoneDescription]);
 
   // Handle drag over for drop zone
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    if (!isDropActive) {
+      setIsDropActive(true);
+    }
+    if (enableDndDebug) {
+      console.log('dragenter overlay', e.dataTransfer.types);
+    }
+  }, [isDropActive, enableDndDebug]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
+    if (!isDropActive) {
+      setIsDropActive(true);
+    }
+    if (enableDndDebug) {
+      console.log('dragover', e.dataTransfer.types);
+    }
+  }, [isDropActive, enableDndDebug]);
+
+  const handleDragOverCapture = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (enableDndDebug) {
+      console.log('dragover capture', e.dataTransfer.types);
+    }
+  }, [enableDndDebug]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (e.currentTarget === e.target) {
+      setIsDropActive(false);
+    }
   }, []);
+
+  const handleDropCapture = useCallback((e: React.DragEvent) => {
+    if (enableDndDebug) {
+      const payload = e.dataTransfer.getData('text/plain');
+      console.log('drop capture', { payload, types: e.dataTransfer.types });
+    }
+  }, [enableDndDebug]);
 
   // Handle drop
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    setIsDropActive(false);
     
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
-    const { latitude, longitude, zoom } = viewState;
-    const scale = Math.pow(2, zoom);
-    const worldSize = 512 * scale;
-    
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    
-    const dx = (x - centerX) / worldSize * 360;
-    const dy = (centerY - y) / worldSize * 360;
-    
-    const lng = longitude + dx;
-    const lat = latitude + dy * Math.cos(latitude * Math.PI / 180);
-    
+
+    const viewport = new WebMercatorViewport({
+      latitude: viewState.latitude,
+      longitude: viewState.longitude,
+      zoom: viewState.zoom,
+      bearing: viewState.bearing,
+      pitch: viewState.pitch,
+      width: rect.width,
+      height: rect.height,
+    });
+
+    const [lng, lat] = viewport.unproject([x, y]);
+
+    const payload = e.dataTransfer.getData('text/plain');
+    let cardId: string | null = null;
+    try {
+      const parsed = JSON.parse(payload);
+      cardId = parsed?.cardId ?? null;
+    } catch {
+      cardId = null;
+    }
+
+    const card = cardId
+      ? PROPOSAL_CARDS.find(c => c.id === cardId)
+      : draggedCard ?? null;
+
+    if (enableDndDebug) {
+      console.log('drop fired', { payload, cardId, card, types: e.dataTransfer.types });
+    }
+
+    if (card) {
+      const proposal = createProposalFromCard(card, { lat, lng });
+      setActiveProposal(proposal);
+      setDraggedCard(null);
+      if (enableDndDebug) {
+        console.log('proposal created', { proposal, lat, lng });
+      }
+    } else if (enableDndDebug) {
+      console.log('drop without card', { payload, lat, lng });
+    }
+
     setProposalPosition({ lat, lng });
     setIsDragging(false);
-  }, [viewState, setProposalPosition, setIsDragging]);
+  }, [
+    viewState,
+    draggedCard,
+    setProposalPosition,
+    setActiveProposal,
+    setDraggedCard,
+    setIsDragging,
+    enableDndDebug,
+  ]);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const updateSize = () => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) {
+        setMapSize({ width: rect.width, height: rect.height });
+      }
+    };
+
+    updateSize();
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleWindowDragEnter = (event: DragEvent) => {
+      if (event.dataTransfer?.types?.includes('text/plain')) {
+        setIsDropActive(true);
+        setIsDragging(true);
+        if (enableDndDebug) {
+          console.log('dragenter window', event.dataTransfer.types);
+        }
+      }
+    };
+
+    const handleWindowDrop = () => {
+      setIsDropActive(false);
+      setIsDragging(false);
+    };
+
+    window.addEventListener('dragenter', handleWindowDragEnter);
+    window.addEventListener('drop', handleWindowDrop);
+    window.addEventListener('dragend', handleWindowDrop);
+
+    return () => {
+      window.removeEventListener('dragenter', handleWindowDragEnter);
+      window.removeEventListener('drop', handleWindowDrop);
+      window.removeEventListener('dragend', handleWindowDrop);
+    };
+  }, [setIsDragging, enableDndDebug]);
+
+  const proposalScreenPosition = useMemo(() => {
+    if (!proposalPosition || mapSize.width === 0 || mapSize.height === 0) {
+      return null;
+    }
+
+    const viewport = new WebMercatorViewport({
+      latitude: viewState.latitude,
+      longitude: viewState.longitude,
+      zoom: viewState.zoom,
+      bearing: viewState.bearing,
+      pitch: viewState.pitch,
+      width: mapSize.width,
+      height: mapSize.height,
+    });
+
+    const [x, y] = viewport.project([proposalPosition.lng, proposalPosition.lat]);
+    return { x, y };
+  }, [proposalPosition, viewState, mapSize]);
 
   const layers = useMemo(() => {
     const result = [];
@@ -430,14 +572,21 @@ export function MapArena({}: MapArenaProps) {
   return (
     <div 
       className="relative w-full h-full"
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      ref={containerRef}
     >
       <MapErrorBoundary>
         <DeckGL
           viewState={viewState}
           onViewStateChange={({ viewState: vs }) => setViewState(vs as typeof viewState)}
-          controller={true}
+          controller={{
+            dragPan: !isDropActive,
+            dragRotate: !isDropActive,
+            scrollZoom: !isDropActive,
+            touchZoom: !isDropActive,
+            touchRotate: !isDropActive,
+            keyboard: !isDropActive,
+            doubleClickZoom: !isDropActive,
+          }}
           layers={layers}
           onClick={handleMapClick}
           onHover={setHoverInfo}
@@ -455,13 +604,26 @@ export function MapArena({}: MapArenaProps) {
           <Map mapStyle={MAP_STYLE} />
         </DeckGL>
       </MapErrorBoundary>
+
+      <div
+        className={`absolute inset-0 z-40 ${isDragging ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        onDragEnter={handleDragEnter}
+        onDragEnterCapture={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragOverCapture={handleDragOverCapture}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onDropCapture={handleDropCapture}
+        aria-hidden="true"
+      />
       
       {/* Proposal marker overlay */}
-      {proposalPosition && activeProposal?.type === 'spatial' && (
+      {proposalPosition && proposalScreenPosition && activeProposal?.type === 'spatial' && (
         <ProposalMarker
           position={proposalPosition}
           proposal={activeProposal}
           viewState={viewState}
+          screenPosition={proposalScreenPosition}
         />
       )}
       
