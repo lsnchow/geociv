@@ -216,8 +216,8 @@ class ZoneDescriber:
                     "content": prompt,
                     "memory": "off",
                     "web_search": "off",
-                    "llm_provider": "openai",
-                    "model_name": "gpt-4o",
+                    "llm_provider": "google",
+                    "model_name": "gemini-2.5-flash",
                     "stream": "false",
                 },
             )
@@ -287,4 +287,3 @@ class ZoneDescriber:
             avoidances.update(avoids)
         
         return list(avoidances)[:2]
-

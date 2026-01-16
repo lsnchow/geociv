@@ -119,7 +119,7 @@ class SimulationReceipt(BaseModel):
     """Metadata about the simulation run."""
     provider: str = "backboard"
     memory: str = "Auto"
-    model_name: str = "gpt-4"
+    model_name: str = "gemini-2.5-flash"
     agent_count: int = 0
     duration_ms: int = 0
     run_hash: str = ""
@@ -137,4 +137,3 @@ class MultiAgentResponse(BaseModel):
     town_hall: Optional[TownHallTranscript] = None
     receipt: SimulationReceipt = Field(default_factory=SimulationReceipt)
     error: Optional[str] = None
-
