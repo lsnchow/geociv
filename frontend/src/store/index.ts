@@ -922,7 +922,7 @@ export const useCivicStore = create<CivicState>()(
       partialize: (state) => ({
         history: state.history,
         autoSimulate: state.autoSimulate,
-        adoptedProposals: state.adoptedProposals,
+        // Note: adoptedProposals intentionally NOT persisted - policies are session-ephemeral
       }),
     }
   )
