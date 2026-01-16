@@ -1,2 +1,12 @@
 .env
-venv
+venv# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+.python-version
+
+# Virtual env / env files
+venv/
+.env
