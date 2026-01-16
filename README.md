@@ -2,17 +2,6 @@
 
 CivicSim is a simulation and decision-support tool for exploring how Kingston community archetypes react to spatial builds and citywide policy proposals. It pairs a deterministic impact engine with a multi-agent town hall layer for explainable results and roleplay-style feedback.
 
-### What was outdated in the old README
-- Mentioned `.env.example`, but the repo does not include one.
-- Listed `/v1/proposal/parse` and `/v1/chat/message`, which are not mounted in the current FastAPI app.
-- Omitted the active `/v1/ai/*` multi-agent endpoints and the newer simulation endpoints (`/simulate/enhanced`, `/compare`, `/roleplay`).
-- Missing frontend (Vite) setup and how it proxies API requests to the backend.
-- Architecture tree contained corrupted characters and did not include the frontend or agents/services layout.
-
-## Demo / Screenshots
-
-[Placeholder for demo video or screenshots]
-
 ## Key Features
 
 - Scenario-based simulation with archetype distributions and per-cluster baselines
@@ -103,9 +92,11 @@ The frontend uses a Vite dev proxy to route `/v1/*` to `http://localhost:8000` (
 ## Environment Variables
 
 Required:
+
 - `DATABASE_URL`: PostgreSQL URL with asyncpg driver (for example, `postgresql+asyncpg://user:password@localhost:5432/civicsim`)
 
 Optional:
+
 - `BACKBOARD_API_KEY`: Required only for `/v1/ai/*` features (multi-agent simulation and narration)
 - `BACKBOARD_BASE_URL`: Backboard API base URL (default: `https://app.backboard.io/api`)
 - `APP_ENV`: Environment name (default: `development`)
