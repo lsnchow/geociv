@@ -24,6 +24,7 @@ from app.schemas.multi_agent import (
     SimulationReceipt,
     MultiAgentResponse,
 )
+from app.schemas.proposal import WorldStateSummary
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,10 @@ class AIChatRequest(BaseModel):
     # Speaker mode for multi-agent roleplay
     speaker_mode: Optional[str] = Field("user", description="'user' or 'agent' - who is speaking")
     speaker_agent_key: Optional[str] = Field(None, description="Agent key if speaker_mode='agent' (e.g., 'developer', 'student')")
+    # Build mode - spatial proposal with vicinity data from drag-drop
+    build_proposal: Optional[dict] = Field(None, description="Spatial proposal with affected_regions and containing_zone from build mode")
+    # World state - canonical state for agent context
+    world_state: Optional[WorldStateSummary] = Field(None, description="Current world state with placed items, adopted policies, and key relationships")
     # Legacy fields (still accepted)
     persona: Optional[str] = None
     auto_simulate: Optional[bool] = True
@@ -140,7 +145,11 @@ async def ai_chat(request: AIChatRequest):
         # Step 2: Get agent reactions (parallel)
         logger.info("[SIM] Step 2: Getting agent reactions...")
         reactor = AgentReactor(client)
-        reactions = await reactor.get_all_reactions(proposal, session_id)
+        # Pass build_proposal vicinity data if available (from drag-drop build mode)
+        vicinity_data = request.build_proposal if request.build_proposal else None
+        # Pass world_state for context-aware reactions
+        world_state = request.world_state
+        reactions = await reactor.get_all_reactions(proposal, session_id, vicinity_data, world_state)
         logger.info(f"[SIM] Got {len(reactions)} reactions")
         
         # Step 3: Aggregate zone sentiment
@@ -283,12 +292,9 @@ async def adopt_proposal(request: AdoptRequest):
     """
     from app.agents.session_manager import get_session_manager
     
-    session = get_session_manager().get_session(request.session_id)
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {request.session_id} not found"
-        )
+    # Use get_or_create_session so adoption works even if user hasn't run an AI chat yet
+    session = get_session_manager().get_or_create_session(request.session_id)
+    logger.info(f"[ADOPT] Session {request.session_id} retrieved/created")
     
     event = request.adopted_event
     

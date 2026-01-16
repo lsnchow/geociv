@@ -50,11 +50,56 @@ export interface AIChatOptions {
   message: string;
   scenario_id: string;
   thread_id?: string;
+  session_id?: string; // For session continuity
   persona?: string;
   auto_simulate?: boolean;
   // Speaker mode for multi-agent roleplay
   speaker_mode?: 'user' | 'agent';
   speaker_agent_key?: string;
+  // Build mode - spatial proposal with vicinity data
+  build_proposal?: {
+    type: 'spatial';
+    spatial_type: string;
+    title: string;
+    latitude: number;
+    longitude: number;
+    scale?: number;
+    radius_km?: number;
+    affected_regions?: Array<{
+      zone_id: string;
+      zone_name: string;
+      distance_bucket: 'near' | 'medium' | 'far';
+      proximity_weight: number;
+    }>;
+    containing_zone?: { id: string; name: string };
+  };
+  // World state - canonical state for agent context
+  world_state?: {
+    version: number;
+    placed_items: Array<{
+      id: string;
+      type: string;
+      title: string;
+      region_id?: string;
+      region_name?: string;
+      radius_km: number;
+      emoji: string;
+    }>;
+    adopted_policies: Array<{
+      id: string;
+      title: string;
+      summary: string;
+      outcome: string;
+      vote_pct: number;
+      timestamp: string;
+    }>;
+    top_relationship_shifts: Array<{
+      from_agent: string;
+      to_agent: string;
+      score: number;
+      reason: string;
+    }>;
+  };
 }
 
 /**
@@ -80,10 +125,13 @@ export async function chat(options: AIChatOptions): Promise<SimulationResponse> 
       message: options.message,
       scenario_id: options.scenario_id,
       thread_id: options.thread_id,
+      session_id: options.session_id,
       persona: options.persona,
       auto_simulate: options.auto_simulate ?? true,
       speaker_mode: options.speaker_mode || 'user',
       speaker_agent_key: options.speaker_agent_key,
+      build_proposal: options.build_proposal,
+      world_state: options.world_state,
     }),
   });
   

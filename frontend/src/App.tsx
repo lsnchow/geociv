@@ -107,7 +107,14 @@ function App() {
   const [rightPanelTab, setRightPanelTab] = useState<'results' | 'agents' | 'townhall'>('results');
   
   // Get multi-agent state from store
-  const { agentReactions } = useCivicStore();
+  const { 
+    agentReactions, 
+    agentSimulation, 
+    adoptProposal, 
+    forceForwardProposal,
+    isAdopting,
+    sessionId,
+  } = useCivicStore();
 
   // Load scenarios on mount
   useEffect(() => {
@@ -292,6 +299,24 @@ function App() {
                     transcript={townHall}
                     onCrossExamine={handleCrossExamine}
                     onFlipSpeaker={handleFlipSpeaker}
+                    canPromote={(() => {
+                      const support = agentReactions.filter(r => r.stance === 'support').length;
+                      const oppose = agentReactions.filter(r => r.stance === 'oppose').length;
+                      const totalVotes = support + oppose;
+                      return totalVotes > 0 && (support / totalVotes) >= 0.5;
+                    })()}
+                    onPromoteToPolicy={agentSimulation?.proposal ? async () => {
+                      const proposal = agentSimulation.proposal;
+                      if (proposal) {
+                        await adoptProposal(proposal, agentReactions, sessionId);
+                      }
+                    } : undefined}
+                    onForcePolicy={agentSimulation?.proposal ? async () => {
+                      const proposal = agentSimulation.proposal;
+                      if (proposal) {
+                        await forceForwardProposal(proposal, agentReactions, sessionId);
+                      }
+                    } : undefined}
                   />
                 </div>
               </div>

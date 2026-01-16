@@ -1,13 +1,23 @@
 import { useCallback, useMemo, useState, Component, type ReactNode } from 'react';
 import { Map } from 'react-map-gl/maplibre';
 import DeckGL from '@deck.gl/react';
-import { TextLayer, PolygonLayer, GeoJsonLayer } from '@deck.gl/layers';
+import { TextLayer, PolygonLayer, GeoJsonLayer, ScatterplotLayer } from '@deck.gl/layers';
 import type { PickingInfo } from '@deck.gl/core';
-import { useCivicStore } from '../../store';
-import { ProposalMarker } from './ProposalMarker';
+import { useCivicStore, createProposalFromCard } from '../../store';
+// ProposalMarker removed - using deck.gl placedMarkerLayer instead
+import { BuildProposalPanel } from './BuildProposalPanel';
 import * as aiApi from '../../lib/ai-api';
 import type { ZoneDescription } from '../../types/ai';
 import type { ZoneSentiment, AgentReaction } from '../../types/simulation';
+import type { SpatialProposal, RegionImpact } from '../../types';
+import { 
+  snapToGrid, 
+  calculateCentroid, 
+  rankRegionsByDistance, 
+  findContainingZone,
+  getGridCellCorners,
+  type ZoneCentroid 
+} from '../../lib/grid-utils';
 import kingstonZones from '../../data/kingston-zones.json';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -160,21 +170,58 @@ export function MapArena({}: MapArenaProps) {
     proposalPosition,
     isDragging,
     draggedCard,
+    setActiveProposal,
     setProposalPosition,
     setIsDragging,
+    setDraggedCard,
+    placedItems,
+    commitPlacement,
+    removePlacedItem,
+    selectedPlacedItemId,
+    setSelectedPlacedItemId,
     zoneSentiments,
     selectedZoneId,
     setSelectedZoneId,
     agentSimulation,
-    setDmTarget,
-    setSpeakingAs,
+    setTargetAgent,
+    setSpeakingAsAgent,
   } = useCivicStore();
   
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [hoverInfo, setHoverInfo] = useState<PickingInfo | null>(null);
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
-  const [zoneDescription, setZoneDescription] = useState<ZoneDescription | null>(null);
-  const [isLoadingZone, setIsLoadingZone] = useState(false);
+  const [_zoneDescription, setZoneDescription] = useState<ZoneDescription | null>(null);
+  const [_isLoadingZone, setIsLoadingZone] = useState(false);
+  // Suppress unused variable warnings - these are used by setters
+  void _zoneDescription; void _isLoadingZone;
+  
+  // Build mode state - ghost marker during drag
+  const [dragGhostPosition, setDragGhostPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [highlightedZoneId, setHighlightedZoneId] = useState<string | null>(null);
+  const [showBuildPanel, setShowBuildPanel] = useState(false);
+
+  // Precompute zone centroids for proximity calculations
+  const zoneCentroids: ZoneCentroid[] = useMemo(() => {
+    return kingstonZones.features.map(feature => {
+      const coords = feature.geometry.coordinates[0] as number[][];
+      const centroid = calculateCentroid(coords);
+      return {
+        zone_id: feature.properties.id,
+        zone_name: feature.properties.name,
+        lat: centroid.lat,
+        lng: centroid.lng,
+      };
+    });
+  }, []);
+  
+  // Zone polygons for containment check
+  const zonePolygons = useMemo(() => {
+    return kingstonZones.features.map(feature => ({
+      id: feature.properties.id,
+      name: feature.properties.name,
+      coordinates: feature.geometry.coordinates[0] as number[][],
+    }));
+  }, []);
 
   // Convert clusters to map points with scores
   const clusterPoints: ClusterPoint[] = useMemo(() => {
@@ -263,15 +310,23 @@ export function MapArena({}: MapArenaProps) {
         const props = d.properties;
         const isHovered = props.id === hoveredZoneId;
         const isSelected = props.id === selectedZoneId;
+        const isDragTarget = props.id === highlightedZoneId;
+        // During drag, highlight the target zone
+        if (isDragTarget) return [139, 92, 246, 100]; // Purple highlight
         return getSentimentColor(props.sentiment, isHovered, isSelected);
       },
       getLineColor: (d: { properties: { id: string; sentiment?: ZoneSentiment } }) => {
         const props = d.properties;
         const isSelected = props.id === selectedZoneId;
+        const isDragTarget = props.id === highlightedZoneId;
+        // During drag, highlight the target zone border
+        if (isDragTarget) return [139, 92, 246, 255]; // Purple border
         return getSentimentBorderColor(props.sentiment, isSelected);
       },
       getLineWidth: (d: { properties: { id: string } }) => {
         const props = d.properties;
+        const isDragTarget = props.id === highlightedZoneId;
+        if (isDragTarget) return 4;
         return props.id === selectedZoneId ? 4 : 2;
       },
       onHover: (info: PickingInfo) => {
@@ -283,12 +338,12 @@ export function MapArena({}: MapArenaProps) {
         }
       },
       updateTriggers: {
-        getFillColor: [zoneSentiments, hoveredZoneId, selectedZoneId],
-        getLineColor: [zoneSentiments, selectedZoneId],
-        getLineWidth: [selectedZoneId],
+        getFillColor: [zoneSentiments, hoveredZoneId, selectedZoneId, highlightedZoneId],
+        getLineColor: [zoneSentiments, selectedZoneId, highlightedZoneId],
+        getLineWidth: [selectedZoneId, highlightedZoneId],
       },
     });
-  }, [zoneSentiments, hoveredZoneId, selectedZoneId]);
+  }, [zoneSentiments, hoveredZoneId, selectedZoneId, highlightedZoneId]);
 
   // Zone name labels (visible at certain zoom levels)
   const zoneLabelLayer = useMemo(() => {
@@ -388,10 +443,18 @@ export function MapArena({}: MapArenaProps) {
     
     const [lng, lat] = info.coordinate;
     
+    // B3: If clicking on a committed/placed item, select it for deletion
+    if (info.object && info.layer?.id === 'committed-items-icon') {
+      const item = info.object as { id: string };
+      setSelectedPlacedItemId(item.id);
+      return;
+    }
+    
     // If clicking on a sentiment zone (from multi-agent simulation)
     if (info.object && info.layer?.id === 'sentiment-zones') {
       const props = (info.object as { properties: { id: string } }).properties;
       setSelectedZoneId(props.id);
+      setSelectedPlacedItemId(null); // Clear placed item selection
       return;
     }
     
@@ -400,31 +463,44 @@ export function MapArena({}: MapArenaProps) {
       const cluster = info.object as ClusterPoint;
       setSelectedZoneId(cluster.id);
       fetchZoneDescription(cluster.id);
+      setSelectedPlacedItemId(null); // Clear placed item selection
       return;
     }
     
-    // Deselect zone if clicking elsewhere
+    // Deselect zone and placed item if clicking elsewhere
     if (selectedZoneId) {
       setSelectedZoneId(null);
       setZoneDescription(null);
+    }
+    if (selectedPlacedItemId) {
+      setSelectedPlacedItemId(null);
     }
     
     // If we have an active spatial proposal or are dragging, set its position
     if (activeProposal?.type === 'spatial' || draggedCard?.type === 'spatial') {
       setProposalPosition({ lat, lng });
     }
-  }, [activeProposal, draggedCard, setProposalPosition, selectedZoneId, setSelectedZoneId, fetchZoneDescription]);
+  }, [activeProposal, draggedCard, setProposalPosition, selectedZoneId, setSelectedZoneId, fetchZoneDescription, selectedPlacedItemId]);
 
-  // Handle drag over for drop zone
+  // Handle drag over for drop zone - update ghost marker position
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // Prevent duplicate handling
     e.dataTransfer.dropEffect = 'copy';
-  }, []);
-
-  // Handle drop
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
     
+    // DEBUG: Count dragover events
+    console.count('DRAGOVER');
+    
+    // Check if we have a spatial card (from store or dataTransfer types)
+    const hasSpatialCard = draggedCard?.type === 'spatial' || 
+      e.dataTransfer.types.includes('application/json');
+    
+    if (!hasSpatialCard) {
+      console.log('[DRAGOVER] No spatial card, skipping');
+      return;
+    }
+    
+    // Use the container rect (same element DeckGL uses)
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -439,34 +515,384 @@ export function MapArena({}: MapArenaProps) {
     const dx = (x - centerX) / worldSize * 360;
     const dy = (centerY - y) / worldSize * 360;
     
-    const lng = longitude + dx;
-    const lat = latitude + dy * Math.cos(latitude * Math.PI / 180);
+    const rawLng = longitude + dx;
+    const rawLat = latitude + dy * Math.cos(latitude * Math.PI / 180);
     
-    setProposalPosition({ lat, lng });
-    setIsDragging(false);
-  }, [viewState, setProposalPosition, setIsDragging]);
+    // Snap to grid
+    const snapped = snapToGrid(rawLat, rawLng);
+    
+    // DEBUG: Log every 20th dragover to avoid spam
+    if (Math.random() < 0.05) {
+      console.log('[DRAGOVER] rect:', { l: rect.left.toFixed(0), t: rect.top.toFixed(0), w: rect.width.toFixed(0), h: rect.height.toFixed(0) });
+      console.log('[DRAGOVER] x,y:', x.toFixed(0), y.toFixed(0), '-> lng,lat:', rawLng.toFixed(5), rawLat.toFixed(5));
+      console.log('[DRAGOVER] viewState:', { lng: longitude.toFixed(5), lat: latitude.toFixed(5), zoom: zoom.toFixed(2) });
+      console.log('[DRAGOVER] setDragGhostPosition:', snapped);
+    }
+    
+    setDragGhostPosition(snapped);
+    
+    // Highlight containing zone
+    const containingZone = findContainingZone(snapped, zonePolygons);
+    setHighlightedZoneId(containingZone?.id || null);
+  }, [viewState, draggedCard, zonePolygons]);
+
+  // Handle drop - use ghost position (computed in dragOver) as the ONLY source of coordinates
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('[DROP] ========== DROP EVENT ==========');
+    console.log('[DROP] dragGhostPosition:', dragGhostPosition);
+    
+    try {
+      // B2: Hard cap at 10 placed items
+      if (placedItems.length >= 10) {
+        alert('Maximum 10 items allowed. Delete an item to place more.');
+        console.warn('[DROP] Max items reached (10) - aborting');
+        return;
+      }
+      
+      // Auto-commit any existing placement before creating a new one
+      // This prevents items from being "overwritten"
+      if (activeProposal && proposalPosition) {
+        console.log('[DROP] Auto-committing existing placement before new drop');
+        commitPlacement();
+      }
+      
+      // STRICT: Abort if ghost position is null (no fallback to center)
+      if (!dragGhostPosition) {
+        console.warn('[DROP] No ghost position - aborting (no center fallback)');
+        return;
+      }
+      
+      // Get card from store or dataTransfer
+      let card = draggedCard;
+      if (!card) {
+        try {
+          const data = e.dataTransfer.getData('application/json');
+          if (data) card = JSON.parse(data);
+        } catch (err) {
+          console.error('[DROP] Error parsing dataTransfer:', err);
+        }
+      }
+      
+      if (!card) {
+        console.warn('[DROP] No card data - aborting');
+        return;
+      }
+      
+      // Use the ghost position directly - it was already computed in dragOver
+      const dropPosition = { lat: dragGhostPosition.lat, lng: dragGhostPosition.lng };
+      
+      console.log('[DROP] Using ghost position:', dropPosition);
+      
+      // Calculate affected regions by proximity
+      const affectedRegions: RegionImpact[] = rankRegionsByDistance(dropPosition, zoneCentroids);
+      
+      // Find containing zone
+      const containingZone = findContainingZone(dropPosition, zonePolygons);
+      
+      // Create proposal from card with position and vicinity data
+      const proposal = createProposalFromCard(card, dropPosition) as SpatialProposal;
+      proposal.affected_regions = affectedRegions;
+      proposal.containing_zone = containingZone || undefined;
+      
+      // Set active proposal and position
+      setActiveProposal(proposal);
+      setProposalPosition(dropPosition);
+      
+      console.log('[DROP] Proposal created:', { title: proposal.title, lat: dropPosition.lat, lng: dropPosition.lng });
+      
+      // Show build panel for configuration
+      setShowBuildPanel(true);
+      
+    } catch (err) {
+      console.error('[DROP] Error in drop handler:', err);
+    } finally {
+      // GUARANTEED CLEANUP: Always clear drag state
+      console.log('[DROP] Clearing drag state (finally block)');
+      setDragGhostPosition(null);
+      setHighlightedZoneId(null);
+      setIsDragging(false);
+      setDraggedCard(null);
+    }
+  }, [dragGhostPosition, draggedCard, zoneCentroids, zonePolygons, setActiveProposal, setProposalPosition, setIsDragging, setDraggedCard, placedItems, activeProposal, proposalPosition, commitPlacement]);
+
+  // Handle drag leave - clear ghost marker only when truly leaving
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.stopPropagation(); // Prevent duplicate handling
+    
+    // Only clear if the cursor is truly leaving the map container
+    // (not just transitioning between internal child elements)
+    const relatedTarget = e.relatedTarget as Node | null;
+    const currentTarget = e.currentTarget as Node;
+    
+    // If relatedTarget is null or outside currentTarget, we're truly leaving
+    if (!relatedTarget || !currentTarget.contains(relatedTarget)) {
+      setDragGhostPosition(null);
+      setHighlightedZoneId(null);
+    }
+  }, []);
+
+  // Grid cell highlight layer (shows during drag)
+  const gridHighlightLayer = useMemo(() => {
+    if (!dragGhostPosition) return null;
+    
+    const cellCorners = getGridCellCorners(dragGhostPosition);
+    
+    return new PolygonLayer({
+      id: 'grid-highlight',
+      data: [{ polygon: cellCorners }],
+      pickable: false,
+      stroked: true,
+      filled: true,
+      lineWidthMinPixels: 2,
+      getPolygon: (d: { polygon: number[][] }) => d.polygon,
+      getFillColor: [96, 165, 250, 40], // Blue with low opacity
+      getLineColor: [96, 165, 250, 200], // Blue border
+      getLineWidth: 2,
+    });
+  }, [dragGhostPosition]);
+
+  // Ghost marker layer (shows during drag as scatterplot for performance)
+  const ghostMarkerLayer = useMemo(() => {
+    if (!dragGhostPosition || !draggedCard) return null;
+    
+    return new ScatterplotLayer({
+      id: 'ghost-marker',
+      data: [{ position: [dragGhostPosition.lng, dragGhostPosition.lat] }],
+      pickable: false,
+      opacity: 0.7,
+      stroked: true,
+      filled: true,
+      radiusMinPixels: 20,
+      radiusMaxPixels: 40,
+      lineWidthMinPixels: 2,
+      getPosition: (d: { position: [number, number] }) => d.position,
+      getFillColor: [139, 92, 246, 180], // Purple
+      getLineColor: [255, 255, 255, 255],
+      getRadius: 200, // meters
+    });
+  }, [dragGhostPosition, draggedCard]);
+  
+  // Proposal type to icon mapping
+  const PROPOSAL_ICONS: Record<string, string> = {
+    park: '🌳',
+    upzone: '🏗️',
+    housing_development: '🏠',
+    transit_line: '🚌',
+    bike_lane: '🚴',
+    commercial_development: '🏪',
+    community_center: '🏛️',
+    factory: '🏭',
+  };
+  
+  // B1: Zoom-responsive icon size - larger icons when zoomed in
+  const iconSize = useMemo(() => {
+    const z = viewState.zoom;
+    if (z < 12) return 18;
+    if (z < 14) return 24;
+    if (z < 16) return 32;
+    return 40;
+  }, [viewState.zoom]);
+  
+  // Placed marker halo layer - world-space radius (scales with zoom like real geography)
+  const placedMarkerHaloLayer = useMemo(() => {
+    if (!proposalPosition || !activeProposal || activeProposal.type !== 'spatial') return null;
+    
+    // Convert radius_km to meters for world-space rendering
+    const radiusKm = activeProposal.radius_km || 0.5;
+    const radiusMeters = radiusKm * 1000;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MapArena:placedMarkerHaloLayer',message:'Creating halo with radius',data:{radiusKm,radiusMeters,scale:activeProposal.scale},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'radius'})}).catch(()=>{});
+    // #endregion
+    
+    return new ScatterplotLayer({
+      id: 'placed-marker-halo',
+      data: [{ position: [proposalPosition.lng, proposalPosition.lat] }],
+      pickable: false,
+      opacity: 0.6,
+      stroked: true,
+      filled: true,
+      radiusMinPixels: 10,  // Minimum visible size when zoomed out
+      radiusMaxPixels: 500, // Max size when zoomed in
+      lineWidthMinPixels: 2,
+      getPosition: (d: { position: [number, number] }) => d.position,
+      getFillColor: [59, 130, 246, 80], // Blue with transparency
+      getLineColor: [59, 130, 246, 200], // Blue border
+      getRadius: radiusMeters, // World-space radius in meters
+    });
+  }, [proposalPosition, activeProposal]);
+  
+  // Placed marker icon layer - emoji at position (zoom-responsive)
+  const placedMarkerIconLayer = useMemo(() => {
+    if (!proposalPosition || !activeProposal || activeProposal.type !== 'spatial') return null;
+    
+    const spatialType = activeProposal.spatial_type;
+    const iconFromMap = PROPOSAL_ICONS[spatialType];
+    const icon = iconFromMap || '📍';
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MapArena:placedMarkerIconLayer',message:'Active proposal icon',data:{spatialType,iconFromMap:iconFromMap||'UNDEFINED',finalIcon:icon,iconLength:icon?.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+    // #endregion
+    
+    // Collect all unique emoji characters for the font atlas
+    const allEmojis = Object.values(PROPOSAL_ICONS).join('') + '📍';
+    
+    return new TextLayer({
+      id: 'placed-marker-icon',
+      data: [{ position: [proposalPosition.lng, proposalPosition.lat], icon }],
+      pickable: false,
+      getPosition: (d: { position: [number, number] }) => d.position,
+      getText: (d: { icon: string }) => d.icon,
+      getSize: iconSize, // B1: Zoom-responsive
+      getColor: [255, 255, 255, 255],
+      getTextAnchor: 'middle',
+      getAlignmentBaseline: 'center',
+      // Include emoji-capable fonts for WebGL rendering
+      fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", sans-serif',
+      // Tell deck.gl which characters to include in font atlas
+      characterSet: allEmojis,
+      // Add background for better visibility
+      background: true,
+      backgroundPadding: [4, 4],
+      getBackgroundColor: [30, 30, 35, 220],
+      getBorderColor: [59, 130, 246, 255],
+      getBorderWidth: 2,
+    });
+  }, [proposalPosition, activeProposal, iconSize]);
+  
+  // Layer for all committed/placed items (persistent)
+  const committedItemsHaloLayer = useMemo(() => {
+    // DEBUG: Log placedItems state
+    console.log('[PLACED_ITEMS] Halo layer rebuild - count:', placedItems.length, placedItems.map(i => ({ id: i.id, type: i.proposal.spatial_type })));
+    
+    if (placedItems.length === 0) return null;
+    
+    const data = placedItems.map(item => ({
+      id: item.id,
+      position: [item.position.lng, item.position.lat] as [number, number],
+      radius: (item.proposal.radius_km || 0.5) * 1000,
+      isSelected: item.id === selectedPlacedItemId,
+    }));
+    
+    return new ScatterplotLayer({
+      id: 'committed-items-halo',
+      data,
+      pickable: false,
+      opacity: 0.5,
+      stroked: true,
+      filled: true,
+      radiusMinPixels: 10,
+      radiusMaxPixels: 500,
+      lineWidthMinPixels: 2,
+      getPosition: (d: { position: [number, number] }) => d.position,
+      // Highlight selected item with blue, others green
+      getFillColor: (d: { isSelected: boolean }) => d.isSelected ? [59, 130, 246, 120] : [34, 197, 94, 80],
+      getLineColor: (d: { isSelected: boolean }) => d.isSelected ? [59, 130, 246, 255] : [34, 197, 94, 200],
+      getLineWidth: (d: { isSelected: boolean }) => d.isSelected ? 3 : 1,
+      getRadius: (d: { radius: number }) => d.radius,
+      updateTriggers: {
+        getFillColor: [selectedPlacedItemId],
+        getLineColor: [selectedPlacedItemId],
+        getLineWidth: [selectedPlacedItemId],
+      },
+    });
+  }, [placedItems, selectedPlacedItemId]);
+  
+  const committedItemsIconLayer = useMemo(() => {
+    // DEBUG: Log icon layer data
+    console.log('[PLACED_ITEMS] Icon layer rebuild - count:', placedItems.length);
+    
+    if (placedItems.length === 0) return null;
+    
+    const data = placedItems.map(item => {
+      const spatialType = item.proposal.spatial_type;
+      const iconFromMap = PROPOSAL_ICONS[spatialType];
+      const icon = iconFromMap || '📍';
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MapArena:committedItemsIconLayer:map',message:'Building icon data',data:{itemId:item.id,spatialType,iconFromMap:iconFromMap||'UNDEFINED',finalIcon:icon,iconLength:icon?.length,iconCharCode:icon?.charCodeAt(0),availableKeys:Object.keys(PROPOSAL_ICONS)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H3'})}).catch(()=>{});
+      // #endregion
+      
+      console.log('[PLACED_ITEMS] Item:', item.id, 'type:', spatialType, 'iconFromMap:', iconFromMap, 'finalIcon:', icon);
+      return {
+        id: item.id,
+        position: [item.position.lng, item.position.lat] as [number, number],
+        icon,
+      };
+    });
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/36b22d3a-abef-4d8c-b3d9-d3a34145295b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MapArena:committedItemsIconLayer:final',message:'Final layer data',data:{dataLength:data.length,firstItem:data[0],allIcons:data.map(d=>d.icon)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2-H5'})}).catch(()=>{});
+    // #endregion
+    
+    // Collect all unique emoji characters for the font atlas
+    const allEmojis = Object.values(PROPOSAL_ICONS).join('') + '📍';
+    
+    return new TextLayer({
+      id: 'committed-items-icon',
+      data,
+      pickable: true, // B3: Make clickable for deletion
+      getPosition: (d: { position: [number, number] }) => d.position,
+      getText: (d: { icon: string }) => d.icon,
+      getSize: iconSize, // B1: Zoom-responsive
+      getColor: [255, 255, 255, 255],
+      getTextAnchor: 'middle',
+      getAlignmentBaseline: 'center',
+      // Include emoji-capable fonts for WebGL rendering
+      fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", sans-serif',
+      // Tell deck.gl which characters to include in font atlas
+      characterSet: allEmojis,
+      background: true,
+      backgroundPadding: [4, 4],
+      getBackgroundColor: [34, 60, 34, 220], // Dark green bg
+      getBorderColor: [34, 197, 94, 255],
+      getBorderWidth: 2,
+    });
+  }, [placedItems, iconSize]);
 
   const layers = useMemo(() => {
     const result = [];
     // Add sentiment zones first (below other layers)
     if (sentimentZoneLayer) result.push(sentimentZoneLayer);
     if (polygonLayer) result.push(polygonLayer);
+    // Grid highlight during drag
+    if (gridHighlightLayer) result.push(gridHighlightLayer);
+    // Ghost marker during drag
+    if (ghostMarkerLayer) result.push(ghostMarkerLayer);
+    // Committed/placed items (persistent, green)
+    if (committedItemsHaloLayer) result.push(committedItemsHaloLayer);
+    if (committedItemsIconLayer) result.push(committedItemsIconLayer);
+    // Current placement being edited (blue)
+    if (placedMarkerHaloLayer) result.push(placedMarkerHaloLayer);
+    
+    // DEBUG: Log layer composition
+    console.log('[LAYERS] Active layers:', result.map(l => l.id), 'hasCommittedHalo:', !!committedItemsHaloLayer, 'hasCommittedIcon:', !!committedItemsIconLayer);
+    if (placedMarkerIconLayer) result.push(placedMarkerIconLayer);
     // Zone labels on top
     if (zoneLabelLayer) result.push(zoneLabelLayer);
     return result;
-  }, [sentimentZoneLayer, polygonLayer, zoneLabelLayer]);
+  }, [sentimentZoneLayer, polygonLayer, gridHighlightLayer, ghostMarkerLayer, committedItemsHaloLayer, committedItemsIconLayer, placedMarkerHaloLayer, placedMarkerIconLayer, zoneLabelLayer]);
 
   return (
     <div 
       className="relative w-full h-full"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+      onDragLeave={handleDragLeave}
     >
       <MapErrorBoundary>
         <DeckGL
           viewState={viewState}
-          onViewStateChange={({ viewState: vs }) => setViewState(vs as typeof viewState)}
-          controller={true}
+          onViewStateChange={({ viewState: vs }) => {
+            // Freeze map navigation during drag (P0-4)
+            if (!isDragging) {
+              setViewState(vs as typeof viewState);
+            }
+          }}
+          controller={!isDragging} // Disable controller during drag
           layers={layers}
           onClick={handleMapClick}
           onHover={setHoverInfo}
@@ -485,14 +911,51 @@ export function MapArena({}: MapArenaProps) {
         </DeckGL>
       </MapErrorBoundary>
       
-      {/* Proposal marker overlay */}
-      {proposalPosition && activeProposal?.type === 'spatial' && (
-        <ProposalMarker
-          position={proposalPosition}
-          proposal={activeProposal}
-          viewState={viewState}
+      {/* Proposal marker is now rendered via deck.gl placedMarkerLayer for pixel-perfect alignment */}
+      
+      {/* Build Proposal Panel - shows after dropping a build item */}
+      {showBuildPanel && activeProposal?.type === 'spatial' && (
+        <BuildProposalPanel
+          onClose={() => setShowBuildPanel(false)}
         />
       )}
+      
+      {/* B3: Delete placed item overlay */}
+      {selectedPlacedItemId && (() => {
+        const item = placedItems.find(i => i.id === selectedPlacedItemId);
+        if (!item) return null;
+        return (
+          <div className="absolute bottom-4 right-4 bg-civic-surface/95 backdrop-blur border border-civic-border rounded-lg shadow-xl p-4 z-30">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{PROPOSAL_ICONS[item.proposal.spatial_type] || '📍'}</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-civic-text">{item.proposal.title}</p>
+                <p className="text-xs text-civic-text-secondary">
+                  {item.proposal.scale === 1 ? 'Small' : item.proposal.scale === 2 ? 'Medium' : 'Large'} impact
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  removePlacedItem(selectedPlacedItemId);
+                  setSelectedPlacedItemId(null);
+                }}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded transition-colors"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => setSelectedPlacedItemId(null)}
+                className="px-3 py-1.5 bg-civic-muted hover:bg-civic-border text-civic-text text-sm font-medium rounded transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="text-xs text-civic-text-secondary mt-2">
+              {placedItems.length}/10 items placed
+            </p>
+          </div>
+        );
+      })()}
       
       {/* Zone panel - shows regional agent info (with or without simulation) */}
       {selectedZoneId && (() => {
@@ -584,7 +1047,11 @@ export function MapArena({}: MapArenaProps) {
                   <div className="flex gap-2 pt-1">
                     <button
                       onClick={() => {
-                        setDmTarget(regionalAgent?.agent_key || selectedZoneId);
+                        const agentKey = regionalAgent?.agent_key || selectedZoneId;
+                        const agentName = regionalAgent?.agent_name || defaultAgent?.name || selectedZoneId;
+                        if (agentKey && agentName) {
+                          setTargetAgent({ key: agentKey, name: agentName });
+                        }
                         setSelectedZoneId(null);
                       }}
                       className="flex-1 px-2 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs rounded transition-colors"
@@ -593,7 +1060,12 @@ export function MapArena({}: MapArenaProps) {
                     </button>
                     <button
                       onClick={() => {
-                        setSpeakingAs(regionalAgent?.agent_key || selectedZoneId);
+                        const agentKey = regionalAgent?.agent_key || selectedZoneId;
+                        const agentName = regionalAgent?.agent_name || defaultAgent?.name || selectedZoneId;
+                        const agentAvatar = regionalAgent?.avatar || defaultAgent?.avatar || '🎭';
+                        if (agentKey && agentName) {
+                          setSpeakingAsAgent({ key: agentKey, name: agentName, avatar: agentAvatar });
+                        }
                         setSelectedZoneId(null);
                       }}
                       className="flex-1 px-2 py-1.5 bg-civic-muted hover:bg-civic-border text-civic-text text-xs rounded transition-colors"
@@ -691,10 +1163,27 @@ export function MapArena({}: MapArenaProps) {
       )}
       
       {/* Drop zone indicator */}
-      {isDragging && (
+      {isDragging && !dragGhostPosition && (
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
           <div className="bg-civic-accent/20 border-2 border-dashed border-civic-accent rounded-xl px-8 py-4">
-            <span className="text-civic-accent font-medium">Drop to place proposal</span>
+            <span className="text-civic-accent font-medium">Drop to place {draggedCard?.name || 'build'}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Ghost position indicator during drag */}
+      {isDragging && dragGhostPosition && draggedCard && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-30">
+          <div className="bg-purple-600/90 backdrop-blur border border-purple-400 rounded-lg px-4 py-2 shadow-lg flex items-center gap-3">
+            <span className="text-lg">{draggedCard.icon}</span>
+            <div>
+              <div className="text-sm font-medium text-white">{draggedCard.name}</div>
+              {highlightedZoneId && (
+                <div className="text-xs text-purple-200">
+                  Drop in: {zoneCentroids.find(z => z.zone_id === highlightedZoneId)?.zone_name || highlightedZoneId}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

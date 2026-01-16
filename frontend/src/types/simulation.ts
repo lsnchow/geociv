@@ -47,6 +47,7 @@ export interface AdoptedEvent {
   session_id: string;
   proposal: InterpretedProposal;
   outcome: 'adopted' | 'forced';
+  origin_proposal_id: string;  // For idempotent promotion
   vote_summary: {
     support: number;
     oppose: number;
@@ -55,6 +56,28 @@ export interface AdoptedEvent {
   };
   key_quotes: AdoptedQuote[];  // 2-4 representative quotes
   zone_deltas: ZoneDelta[];    // which zones shifted most
+}
+
+// =============================================================================
+// Proposal Feed Item (for Results feed)
+// =============================================================================
+
+export type ProposalSource = 'townhall' | 'general_chat' | 'placement';
+
+export interface ProposalFeedItem {
+  id: string;  // Unique proposal ID for idempotent promotion
+  timestamp: string;
+  source: ProposalSource;
+  proposal: InterpretedProposal;
+  reactions: AgentReaction[];
+  vote_summary: {
+    support: number;
+    oppose: number;
+    neutral: number;
+    agreement_pct: number;
+  };
+  can_promote: boolean;  // true if agreement_pct >= 50
+  is_promoted: boolean;  // true if already in adoptedProposals
 }
 
 // =============================================================================

@@ -11,6 +11,7 @@ from app.schemas.multi_agent import (
     AgentReaction,
     ZoneEffect,
 )
+from app.schemas.proposal import WorldStateSummary
 from app.agents.definitions import AGENTS, ZONES
 from app.agents.session_manager import get_session_manager
 
@@ -24,14 +25,16 @@ BIO: {bio}
 SPEAKING STYLE: {speaking_style}
 
 {persona}
-
+{world_state_context}
 A civic proposal has been made in Kingston:
 TITLE: {proposal_title}
 TYPE: {proposal_type}
 SUMMARY: {proposal_summary}
 AFFECTED AREAS: {affected_zones}
+{vicinity_context}
 
 Based on your persona, priorities, concerns, and your region's interests, provide your reaction.
+Consider any existing buildings, adopted policies, or relationship dynamics when forming your opinion.
 
 Respond with ONLY valid JSON:
 - stance: "support", "oppose", or "neutral"
@@ -59,18 +62,24 @@ class AgentReactor:
         self,
         proposal: InterpretedProposal,
         session_id: str,
+        vicinity_data: Optional[dict] = None,
+        world_state: Optional[WorldStateSummary] = None,
     ) -> list[AgentReaction]:
         """
         Get reactions from all agents in parallel.
         
         Uses session_id to maintain thread continuity per agent.
+        vicinity_data (optional): Contains affected_regions with proximity weights.
+        world_state (optional): Canonical world state with placed items, policies, relationships.
         Returns list of AgentReaction objects.
         """
         logger.info(f"[REACTOR] Starting reactions for session={session_id}")
+        if world_state:
+            logger.info(f"[REACTOR] World state: {world_state.version} version, {len(world_state.placed_items)} items, {len(world_state.adopted_policies)} policies")
         
         # Run all agent reactions concurrently
         tasks = [
-            self._get_agent_reaction(agent, proposal, session_id)
+            self._get_agent_reaction(agent, proposal, session_id, vicinity_data, world_state)
             for agent in AGENTS
         ]
         
@@ -94,10 +103,16 @@ class AgentReactor:
         agent: dict,
         proposal: InterpretedProposal,
         session_id: str,
+        vicinity_data: Optional[dict] = None,
+        world_state: Optional[WorldStateSummary] = None,
     ) -> AgentReaction:
         """Get reaction from a single agent."""
         agent_key = agent["key"]
         session = self.session_mgr.get_or_create_session(session_id)
+        
+        # Get region name for this agent
+        zone = next((z for z in ZONES if z["id"] == agent_key), None)
+        region_name = zone["name"] if zone else agent_key
         
         # Build affected zones string
         if proposal.location.zone_ids:
@@ -108,10 +123,29 @@ class AgentReactor:
         else:
             affected = "Citywide"
         
-        # Build prompt - use new agent fields
-        agent_key = agent["key"]
-        zone = next((z for z in ZONES if z["id"] == agent_key), None)
-        region_name = zone["name"] if zone else agent_key
+        # Build world state context (if provided)
+        world_state_context = ""
+        if world_state:
+            world_state_context = world_state.to_prompt_context()
+        
+        # Build vicinity context for this agent (if we have vicinity data from build mode)
+        vicinity_context = ""
+        if vicinity_data and vicinity_data.get("affected_regions"):
+            # Find this agent's region in the affected regions list
+            my_region = next(
+                (r for r in vicinity_data["affected_regions"] if r.get("zone_id") == agent_key),
+                None
+            )
+            if my_region:
+                bucket = my_region.get("distance_bucket", "unknown")
+                weight = my_region.get("proximity_weight", 0)
+                
+                if bucket == "near":
+                    vicinity_context = f"\nPROXIMITY: This proposal is VERY CLOSE to your region ({region_name}). It will strongly affect your community."
+                elif bucket == "medium":
+                    vicinity_context = f"\nPROXIMITY: This proposal is at a MODERATE DISTANCE from your region ({region_name}). It will have some effect on your community."
+                else:  # far
+                    vicinity_context = f"\nPROXIMITY: This proposal is FAR from your region ({region_name}). It will have minimal direct effect on your community, but you may still have opinions."
         
         prompt = REACTION_PROMPT.format(
             agent_name=agent.get("display_name", agent.get("name", "Agent")),
@@ -120,10 +154,12 @@ class AgentReactor:
             bio=agent.get("bio", ""),
             speaking_style=agent.get("speaking_style", "Direct and clear"),
             persona=agent["persona"],
+            world_state_context=world_state_context,
             proposal_title=proposal.title,
             proposal_type=proposal.type,
             proposal_summary=proposal.summary,
             affected_zones=affected,
+            vicinity_context=vicinity_context,
         )
         
         try:

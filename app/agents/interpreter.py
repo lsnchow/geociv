@@ -112,6 +112,17 @@ class ProposalInterpreter:
                 error=f"Failed to parse LLM response as JSON: {str(e)[:100]}"
             )
         
+        # Some LLMs occasionally return a top-level list; normalize to a dict if possible
+        if isinstance(data, list):
+            logger.warning("[INTERPRETER] LLM returned list; attempting to use first element")
+            if data and isinstance(data[0], dict):
+                data = data[0]
+            else:
+                return InterpretResult(
+                    ok=False,
+                    error="Failed to construct result: LLM returned a list without an object payload"
+                )
+        
         # Build result
         try:
             proposal = None
@@ -152,4 +163,3 @@ class ProposalInterpreter:
                 ok=False,
                 error=f"Failed to construct result: {str(e)[:100]}"
             )
-
