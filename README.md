@@ -1,110 +1,94 @@
-# CivicSim - Kingston Civic Reaction Simulator
+# GeoCiv 🏛️
 
-A simulation backend that predicts how different community archetypes react to proposed spatial changes or citywide policies.
+**GeoCiv** is an interactive simulation and decision-support platform for exploring how different Kingston community archetypes respond to **spatial developments** and **citywide policy proposals**.
 
-## Features
+It combines a **deterministic impact engine** with a **multi-agent “town hall” layer** to produce explainable metrics, narratives, and role-play style feedback. The goal is to help policymakers, planners, and students reason about tradeoffs before decisions are made.
 
-- **Archetype-based modeling**: 10 distinct community archetypes with socioeconomic diversity
-- **Dual proposal types**: Spatial (buildings, parks) and citywide (taxes, subsidies)
-- **Distance-decay exposure**: Realistic modeling of how proximity affects community reactions
-- **Explainable outputs**: Clear breakdown of what drives approval/opposition
-- **Chat integration**: Natural language proposal input via Backboard API
+## Core Features
 
-## Quick Start
+* **Spatial + Citywide Proposals:** Support for both map-placed builds (housing, parks) and global policy changes (taxes, subsidies) using shared metric logic.
+* **Diverse Community Archetypes:** Models reactions from specific Kingston resident profiles distributed across geographic clusters.
+* **Explainable Metric Deltas:** Every approval or opposition outcome is traceable to concrete data across housing, environment, and equity.
+* **Multi-Agent Town Hall:** Role-based agents react, debate, and generate narratives, quotes, and compromises in real-time.
+* **Map-First Build Workflow:** Drag proposals onto a real Kingston map and immediately visualize simulated responses.
+* **Ready-to-Run Demo:** Includes comprehensive seeded data for Kingston so the application works out of the box.
+
+## Tech Stack
+
+* **Frontend:** React, TypeScript, Vite, Tailwind CSS, Zustand
+* **Backend:** Python, FastAPI, Pydantic, SQLAlchemy (async), Alembic
+* **Database:** PostgreSQL (asyncpg)
+* **Mapping:** MapLibre GL, DeckGL, react-map-gl
+* **AI/LLM:** Backboard API (Multi-agent simulation and narration)
+
+## Getting Started
+
+To get a local copy of CivicSim up and running, follow these steps.
 
 ### Prerequisites
 
-- Python 3.11+
-- PostgreSQL 14+
-- Backboard API key (for chat features)
+* Python 3.10+
+* Node.js and npm
+* PostgreSQL 14+
+* Backboard API Key (for AI features)
 
 ### Installation
 
-```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+1.  **Clone the repo:**
+    ```sh
+    git clone [https://github.com/lsnchow/kinghacks2026.git](https://github.com/lsnchow/kinghacks2026.git)
+    ```
+2.  **Setup Backend:**
+    ```powershell
+    python -m venv venv
+    # Windows
+    .\venv\Scripts\Activate.ps1 
+    # macOS/Linux: source venv/bin/activate
+    pip install -r requirements.txt
+    ```
+3.  **Setup Frontend:**
+    ```sh
+    cd frontend
+    npm install
+    ```
 
-# Install dependencies
-pip install -r requirements.txt
+## Usage
 
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your database URL and Backboard API key
+1.  **Prepare the Database:**
+    ```powershell
+    psql -U postgres -c "CREATE DATABASE civicsim"
+    alembic upgrade head
+    # Optional: Seed Kingston data
+    python .\scripts\seed_kingston.py
+    ```
+2.  **Start the Backend:**
+    ```sh
+    python -m uvicorn app.main:app --reload
+    ```
+3.  **Start the Frontend:**
+    ```sh
+    cd frontend
+    npm run dev
+    ```
 
-# Initialize database
-alembic upgrade head
+Once both servers are running:
+1. Open the UI at `http://localhost:5173`
+2. Select or create a Kingston **Scenario**
+3. Drag **Proposals** onto the interactive map
+4. Run the **Simulation** to view metric changes
+5. Launch the **Town Hall** to see agent-based debate and transcripts
 
-# Run the server
-uvicorn app.main:app --reload
-```
+## Future Development
 
-### API Documentation
+* **Natural-Language Policy Querying:** Allow users to ask "How would a 2% tax hike affect low-income students?" and receive an AI-generated impact report.
+* **Historical Comparison Mode:** Visualize how Kingston's metrics have shifted over time compared to simulated future trajectories.
+* **Advanced Conflict Resolution:** Enable agents to propose specific amendments to spatial projects to reach higher community consensus.
 
-Once running, visit:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+## Contributing
 
-## API Endpoints
+Contributions are welcome! Please follow these steps:
 
-### Scenarios
-- `POST /v1/scenario/create` - Create a new scenario
-- `GET /v1/scenario/{id}` - Get scenario details
-
-### Proposals
-- `GET /v1/proposals/templates` - List available proposal templates
-- `POST /v1/proposal/parse` - Parse natural language to structured proposal
-
-### Simulation
-- `POST /v1/simulate` - Run simulation and get results
-
-### Chat
-- `POST /v1/chat/message` - Send message for chat-based interaction
-
-### Observability
-- `GET /v1/health` - Health check
-- `GET /v1/metrics` - List metric definitions
-- `GET /v1/archetypes` - List archetype definitions
-
-## Architecture
-
-```
-app/
-├── main.py           # FastAPI application
-├── config.py         # Settings management
-├── database.py       # PostgreSQL connection
-├── models/           # SQLAlchemy models
-├── schemas/          # Pydantic validation
-├── engine/           # Simulation core
-├── routers/          # API endpoints
-└── services/         # External integrations
-```
-
-## Archetypes
-
-1. Low-income renter
-2. Middle-income homeowner
-3. High-income professional
-4. University student
-5. Senior on fixed income
-6. Small business owner
-7. Industrial worker
-8. Developer/builder
-9. Environmental advocate
-10. Young family
-
-## Metrics
-
-| Metric | Description |
-|--------|-------------|
-| Affordability | Cost of living impact |
-| Housing | Supply and availability |
-| Mobility | Transit and commute burden |
-| Environment | Green space and emissions |
-| Economy | Jobs and business vitality |
-| Equity | Distributional fairness |
-
-## License
-
-MIT
-
+1.  Fork the Project
+2.  Create your Feature Branch (`git checkout -b feature/YourFeature`)
+3.  Commit your Changes (`git commit -m 'Add YourFeature'`)
+4.  Push to the Branch (`git push origin feature/YourFeature`)
