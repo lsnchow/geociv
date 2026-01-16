@@ -5,6 +5,7 @@ Design decisions:
 - Separate thread per agent per session (7 agent threads)
 - DM pair threads for agent-to-agent conversations (isolated from main threads)
 - Relationship tracking for tether visualization
+- World state summary tracking (canonical state for agent context)
 - In-memory storage (acceptable for hackathon; uvicorn reload resets)
 - Future: persist to DB for production
 """
@@ -27,6 +28,41 @@ class RelationshipEdge:
 
 
 @dataclass
+class PlacedItem:
+    """A placed build item in the world state."""
+    id: str
+    type: str  # e.g., "park", "housing_development"
+    title: str
+    region_id: Optional[str] = None
+    region_name: Optional[str] = None
+    radius_km: float = 0.5
+    emoji: str = "📍"
+
+
+@dataclass
+class AdoptedPolicy:
+    """An adopted/forced policy in the world state."""
+    id: str
+    title: str
+    summary: str
+    outcome: str  # "adopted" or "forced"
+    vote_pct: int
+    timestamp: str
+
+
+@dataclass 
+class WorldState:
+    """Canonical world state for a session."""
+    version: int = 0
+    placed_items: list[PlacedItem] = field(default_factory=list)
+    adopted_policies: list[AdoptedPolicy] = field(default_factory=list)
+    
+    def increment_version(self):
+        """Increment version on any change."""
+        self.version += 1
+
+
+@dataclass
 class SessionThreads:
     """Thread IDs associated with a session."""
     session_id: str
@@ -41,6 +77,8 @@ class SessionThreads:
     dm_assistant_id: Optional[str] = None
     # Relationship edges: "(agentA, agentB)" -> RelationshipEdge
     relationships: dict[str, RelationshipEdge] = field(default_factory=dict)
+    # World state (canonical state for agent context)
+    world_state: WorldState = field(default_factory=WorldState)
     
     def get_dm_thread_key(self, agent_a: str, agent_b: str) -> str:
         """Get consistent key for DM pair (alphabetically sorted)."""
@@ -67,6 +105,12 @@ class SessionThreads:
     def get_top_relationships(self, n: int = 6) -> list[RelationshipEdge]:
         """Get top N relationships by absolute score."""
         edges = list(self.relationships.values())
+        edges.sort(key=lambda e: abs(e.score), reverse=True)
+        return edges[:n]
+    
+    def get_top_relationship_shifts(self, n: int = 3) -> list[RelationshipEdge]:
+        """Get top N relationships that have changed (non-zero score)."""
+        edges = [e for e in self.relationships.values() if abs(e.score) > 0.1]
         edges.sort(key=lambda e: abs(e.score), reverse=True)
         return edges[:n]
 

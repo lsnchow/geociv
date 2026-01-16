@@ -20,6 +20,15 @@ export type CitywideProposalType =
   | 'housing_policy'
   | 'environmental_policy';
 
+// Vicinity impact for a region
+export interface RegionImpact {
+  zone_id: string;
+  zone_name: string;
+  distance_meters: number;
+  distance_bucket: 'near' | 'medium' | 'far';
+  proximity_weight: number; // 0-1, higher = closer
+}
+
 export interface SpatialProposal {
   type: 'spatial';
   spatial_type: SpatialProposalType;
@@ -28,10 +37,13 @@ export interface SpatialProposal {
   latitude: number;
   longitude: number;
   radius_km?: number;
-  scale?: number;
+  scale?: number; // 1-3 for MVP
   includes_affordable_housing?: boolean;
   includes_green_space?: boolean;
   includes_transit_access?: boolean;
+  // Build mode additions
+  affected_regions?: RegionImpact[]; // Ranked by proximity
+  containing_zone?: { id: string; name: string }; // Zone where build is placed
 }
 
 export interface CitywideProposal {

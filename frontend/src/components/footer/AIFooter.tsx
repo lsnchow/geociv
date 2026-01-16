@@ -30,8 +30,6 @@ export function AIFooter({
         {/* Left: Status badges */}
         <div className="flex items-center gap-3">
           <Badge variant="support" size="sm">AI-DRIVEN</Badge>
-          <Badge variant="default" size="sm">Deterministic Metrics ✓</Badge>
-          <Badge variant="default" size="sm">Assumptions Visible ✓</Badge>
         </div>
         
         {/* Center: Active features */}

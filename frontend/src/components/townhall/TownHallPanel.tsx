@@ -6,6 +6,10 @@ interface TownHallPanelProps {
   transcript: TownHallTranscript;
   onCrossExamine?: (speakerArchetype: string, question: string) => Promise<void>;
   onFlipSpeaker?: (speakerArchetype: string) => Promise<void>;
+  onPromoteToPolicy?: () => Promise<void>;
+  onForcePolicy?: () => Promise<void>;
+  canPromote?: boolean;  // true if approval >= 50%
+  isPromoted?: boolean;  // true if already a policy
   isLoading?: boolean;
 }
 
@@ -13,12 +17,17 @@ export function TownHallPanel({
   transcript, 
   onCrossExamine, 
   onFlipSpeaker,
+  onPromoteToPolicy,
+  onForcePolicy,
+  canPromote = false,
+  isPromoted = false,
   isLoading: _isLoading,
 }: TownHallPanelProps) {
   void _isLoading; // Available for future loading states
   const [selectedSpeaker, setSelectedSpeaker] = useState<string | null>(null);
   const [crossExamineQuestion, setCrossExamineQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
+  const [showForceConfirm, setShowForceConfirm] = useState(false);
   
   const handleCrossExamine = async () => {
     if (!selectedSpeaker || !crossExamineQuestion.trim() || !onCrossExamine) return;
@@ -39,14 +48,73 @@ export function TownHallPanel({
       {/* Summary */}
       <PanelSection className="border-b border-civic-border">
         <p className="text-sm text-civic-text">{transcript.summary}</p>
-        <div className="flex items-center gap-2 mt-2">
+        <div className="flex items-center justify-between gap-2 mt-2">
           <Badge variant={
             transcript.vote_prediction.includes('pass') ? 'support' :
             transcript.vote_prediction.includes('fail') ? 'oppose' : 'neutral'
           }>
             {transcript.vote_prediction}
           </Badge>
+          
+          {/* Promote to Policy actions */}
+          {!isPromoted && onPromoteToPolicy && (
+            <div className="flex items-center gap-2">
+              {/* Discrete admin link */}
+              {onForcePolicy && (
+                <button
+                  onClick={() => setShowForceConfirm(true)}
+                  className="text-[10px] text-civic-text-secondary hover:text-amber-400 transition-colors"
+                >
+                  Force (admin)
+                </button>
+              )}
+              
+              {/* Primary promote button */}
+              <button
+                onClick={onPromoteToPolicy}
+                disabled={!canPromote}
+                title={canPromote ? 'Promote to persistent policy' : 'Needs ≥50% support'}
+                className={`text-xs px-3 py-1 rounded font-medium transition-colors ${
+                  canPromote
+                    ? 'bg-green-600 hover:bg-green-500 text-white'
+                    : 'bg-civic-bg-tertiary text-civic-text-secondary cursor-not-allowed'
+                }`}
+              >
+                Promote to Policy
+              </button>
+            </div>
+          )}
+          
+          {isPromoted && (
+            <span className="text-xs text-green-400">✓ Policy</span>
+          )}
         </div>
+        
+        {/* Force confirmation */}
+        {showForceConfirm && (
+          <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded">
+            <p className="text-xs text-amber-400 mb-2">
+              Force adopt this proposal as policy? This will persist and affect future simulations.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowForceConfirm(false)}
+                className="text-xs text-civic-text-secondary hover:text-civic-text px-2 py-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  onForcePolicy?.();
+                  setShowForceConfirm(false);
+                }}
+                className="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded"
+              >
+                Force Adopt
+              </button>
+            </div>
+          </div>
+        )}
       </PanelSection>
       
       {/* Speakers */}

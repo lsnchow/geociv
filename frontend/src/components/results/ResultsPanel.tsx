@@ -1,11 +1,16 @@
+import { useState } from 'react';
 import { useCivicStore } from '../../store';
 import { Panel, PanelSection, PanelDivider } from '../ui';
 import { ApprovalMeter } from './ApprovalMeter';
 import { DriverList } from './DriverList';
 import { ArchetypeBreakdown } from './ArchetypeBreakdown';
 import { VotingPanel } from './VotingPanel';
+import { PolicyFeed } from './PolicyFeed';
+
+type ResultsTab = 'current' | 'feed';
 
 export function ResultsPanel() {
+  const [activeTab, setActiveTab] = useState<ResultsTab>('current');
   const { 
     simulationResult, 
     isSimulating, 
@@ -15,17 +20,24 @@ export function ResultsPanel() {
     isAdopting,
     adoptProposal,
     forceForwardProposal,
+    adoptedProposals,
+    proposalFeed,
   } = useCivicStore();
   
   // Get interpreted proposal from agent simulation
   const interpretedProposal = agentSimulation?.proposal;
   const sessionId = agentSimulation?.session_id;
   
+  // Generate origin proposal ID for idempotent promotion
+  const originProposalId = agentSimulation?.thread_id 
+    ? `proposal_${agentSimulation.thread_id}_current` 
+    : undefined;
+  
   // Handlers for voting actions
   const handleAdopt = async () => {
     if (interpretedProposal && sessionId) {
       try {
-        await adoptProposal(interpretedProposal, agentReactions, sessionId);
+        await adoptProposal(interpretedProposal, agentReactions, sessionId, originProposalId);
       } catch (error) {
         console.error('Adoption failed:', error);
       }
@@ -35,16 +47,64 @@ export function ResultsPanel() {
   const handleForceForward = async () => {
     if (interpretedProposal && sessionId) {
       try {
-        await forceForwardProposal(interpretedProposal, agentReactions, sessionId);
+        await forceForwardProposal(interpretedProposal, agentReactions, sessionId, originProposalId);
       } catch (error) {
         console.error('Force forward failed:', error);
       }
     }
   };
   
+  // Count for feed badge
+  const feedCount = adoptedProposals.length + proposalFeed.filter(p => !p.is_promoted).length;
+  
+  // Tab header component
+  const TabHeader = () => (
+    <div className="flex border-b border-civic-border">
+      <button
+        onClick={() => setActiveTab('current')}
+        className={`flex-1 py-2 text-xs font-medium transition-colors ${
+          activeTab === 'current'
+            ? 'text-civic-accent border-b-2 border-civic-accent'
+            : 'text-civic-text-secondary hover:text-civic-text'
+        }`}
+      >
+        Current
+      </button>
+      <button
+        onClick={() => setActiveTab('feed')}
+        className={`flex-1 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+          activeTab === 'feed'
+            ? 'text-civic-accent border-b-2 border-civic-accent'
+            : 'text-civic-text-secondary hover:text-civic-text'
+        }`}
+      >
+        Feed
+        {feedCount > 0 && (
+          <span className="bg-civic-accent/20 text-civic-accent text-[10px] px-1.5 py-0.5 rounded-full">
+            {feedCount}
+          </span>
+        )}
+      </button>
+    </div>
+  );
+  
+  // Feed tab content
+  if (activeTab === 'feed') {
+    return (
+      <Panel title="Results" className="h-full flex flex-col">
+        <TabHeader />
+        <div className="flex-1 overflow-hidden">
+          <PolicyFeed />
+        </div>
+      </Panel>
+    );
+  }
+  
+  // Current tab - empty state
   if (!activeProposal) {
     return (
-      <Panel title="Results" className="h-full">
+      <Panel title="Results" className="h-full flex flex-col">
+        <TabHeader />
         <PanelSection>
           <div className="text-center py-12">
             <div className="text-4xl mb-3 opacity-50">📊</div>
@@ -59,7 +119,8 @@ export function ResultsPanel() {
   
   if (isSimulating) {
     return (
-      <Panel title="Results" className="h-full">
+      <Panel title="Results" className="h-full flex flex-col">
+        <TabHeader />
         <PanelSection>
           <div className="text-center py-12">
             <div className="animate-pulse text-4xl mb-3">⚙️</div>
@@ -74,7 +135,8 @@ export function ResultsPanel() {
   
   if (!simulationResult) {
     return (
-      <Panel title="Results" className="h-full">
+      <Panel title="Results" className="h-full flex flex-col">
+        <TabHeader />
         <PanelSection>
           <div className="text-center py-12">
             <div className="text-4xl mb-3 opacity-50">🎯</div>
@@ -91,6 +153,8 @@ export function ResultsPanel() {
   
   return (
     <Panel title="Results" className="h-full flex flex-col">
+      <TabHeader />
+      
       {/* Overall approval */}
       <PanelSection>
         <ApprovalMeter 

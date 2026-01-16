@@ -97,44 +97,50 @@ export function VotingPanel({
         <div className="text-sm text-yellow-400/80 bg-yellow-500/10 rounded-lg p-3">
           <p className="font-medium mb-1">No clear votes recorded</p>
           <p className="text-xs text-civic-text-secondary">
-            All agents are neutral. Consider clarifying the proposal or force forward.
+            All agents are neutral. Consider clarifying the proposal or use admin override.
           </p>
         </div>
       )}
 
       {/* Action Buttons */}
-      <div className="flex gap-2 pt-2">
+      <div className="space-y-2 pt-2">
+        {/* Primary action: Promote to Policy */}
         <button
           onClick={onAdopt}
           disabled={!isPassing || isAdopting}
-          className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+          title={isPassing ? 'Promote to persistent policy' : 'Needs ≥50% support'}
+          className={`w-full py-2.5 px-4 rounded-lg font-medium text-sm transition-all ${
             isPassing && !isAdopting
               ? 'bg-green-600 hover:bg-green-500 text-white cursor-pointer'
               : 'bg-civic-bg-tertiary text-civic-text-secondary cursor-not-allowed opacity-50'
           }`}
         >
-          {isAdopting ? '⏳ Adopting...' : '✓ Adopt Proposal'}
+          {isAdopting ? '⏳ Promoting...' : '✓ Promote to Policy'}
         </button>
-        <button
-          onClick={onForceForward}
-          disabled={isAdopting}
-          className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
-            isAdopting
-              ? 'bg-civic-bg-tertiary text-civic-text-secondary cursor-not-allowed opacity-50'
-              : 'bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-600/50 cursor-pointer'
-          }`}
-        >
-          ⚡ Force Forward
-        </button>
+        
+        {/* Discrete admin override link */}
+        <div className="text-center">
+          <button
+            onClick={onForceForward}
+            disabled={isAdopting}
+            className={`text-xs transition-colors ${
+              isAdopting
+                ? 'text-civic-text-secondary/50 cursor-not-allowed'
+                : 'text-civic-text-secondary hover:text-amber-400'
+            }`}
+          >
+            Force policy (admin)
+          </button>
+        </div>
       </div>
 
       {/* Helper text */}
-      <p className="text-xs text-civic-text-secondary text-center">
+      <p className="text-xs text-civic-text-secondary text-center mt-2">
         {isPassing 
-          ? 'Proposal meets consensus threshold and can be adopted.'
+          ? 'Proposal meets consensus threshold (≥50%) and can be promoted.'
           : isInsufficientSignal
-            ? 'Force forward to proceed without consensus.'
-            : 'Proposal fails consensus. Force forward to override.'
+            ? 'Use admin override to proceed without consensus.'
+            : `Proposal needs ≥50% support to pass (currently ${voteTally.agreementPct}%).`
         }
       </p>
     </div>

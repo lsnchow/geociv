@@ -10,7 +10,7 @@ import type {
   SpatialProposalType,
   CitywideProposalType
 } from '../types';
-import type { SimulationResponse, ZoneSentiment, AgentReaction, TownHallTranscript, AdoptedEvent, InterpretedProposal } from '../types/simulation';
+import type { SimulationResponse, ZoneSentiment, AgentReaction, TownHallTranscript, AdoptedEvent, InterpretedProposal, ProposalFeedItem, ProposalSource } from '../types/simulation';
 import * as api from '../lib/api';
 
 // Relationship edge for visualization
@@ -20,6 +20,46 @@ export interface RelationshipEdge {
   score: number;
   reason?: string;
 }
+
+// World state summary for agent context
+export interface WorldStateSummary {
+  version: number;
+  placed_items: Array<{
+    id: string;
+    type: string;
+    title: string;
+    region_id?: string;
+    region_name?: string;
+    radius_km: number;
+    emoji: string;
+  }>;
+  adopted_policies: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    outcome: string;
+    vote_pct: number;
+    timestamp: string;
+  }>;
+  top_relationship_shifts: Array<{
+    from_agent: string;
+    to_agent: string;
+    score: number;
+    reason: string;
+  }>;
+}
+
+// Emoji lookup for spatial types
+const SPATIAL_TYPE_EMOJI: Record<string, string> = {
+  park: '🌳',
+  upzone: '🏗️',
+  housing_development: '🏠',
+  transit_line: '🚌',
+  bike_lane: '🚴',
+  commercial_development: '🏪',
+  community_center: '🏛️',
+  factory: '🏭',
+};
 
 interface CivicState {
   // Scenario
@@ -32,6 +72,13 @@ interface CivicState {
   proposalPosition: { lat: number; lng: number } | null;
   isDragging: boolean;
   draggedCard: ProposalCard | null;
+  
+  // Placed items (committed placements that persist)
+  placedItems: Array<{ id: string; proposal: SpatialProposal; position: { lat: number; lng: number } }>;
+  selectedPlacedItemId: string | null;  // Currently selected placed item for highlighting/deletion
+  
+  // World state version (incremented on changes)
+  worldStateVersion: number;
   
   // Simulation
   simulationResult: SimulationResult | null;
@@ -54,9 +101,13 @@ interface CivicState {
   // Session ID for thread continuity (initialized once per app load)
   sessionId: string;
   
-  // Adopted proposals
+  // Adopted proposals (persistent policies)
   adoptedProposals: AdoptedEvent[];
   isAdopting: boolean;
+  adoptionError: string | null;  // Error message from last failed adoption
+  
+  // Proposal feed (all proposals with approval data - ephemeral)
+  proposalFeed: ProposalFeedItem[];
   
   // History
   history: HistoryEntry[];
@@ -78,6 +129,14 @@ interface CivicState {
   setProposalPosition: (pos: { lat: number; lng: number } | null) => void;
   setIsDragging: (dragging: boolean) => void;
   setDraggedCard: (card: ProposalCard | null) => void;
+  
+  // Placed items actions
+  commitPlacement: () => void;  // Move activeProposal to placedItems
+  removePlacedItem: (id: string) => void;
+  setSelectedPlacedItemId: (id: string | null) => void;
+  
+  // World state
+  buildWorldStateSummary: () => WorldStateSummary;
   
   runSimulation: () => Promise<void>;
   setAutoSimulate: (auto: boolean) => void;
@@ -103,9 +162,19 @@ interface CivicState {
   loadRelationships: (sessionId: string) => Promise<void>;
   exitDMMode: () => void;
   
-  // Adoption actions
-  adoptProposal: (proposal: InterpretedProposal, reactions: AgentReaction[], sessionId: string) => Promise<void>;
-  forceForwardProposal: (proposal: InterpretedProposal, reactions: AgentReaction[], sessionId: string) => Promise<void>;
+  // Adoption actions (promoteToPolicy is the new primary action)
+  adoptProposal: (proposal: InterpretedProposal, reactions: AgentReaction[], sessionId: string, originProposalId?: string) => Promise<void>;
+  forceForwardProposal: (proposal: InterpretedProposal, reactions: AgentReaction[], sessionId: string, originProposalId?: string) => Promise<void>;
+  promoteToPolicy: (proposalId: string) => Promise<void>;  // Idempotent by origin_proposal_id
+  forcePolicy: (proposalId: string) => Promise<void>;  // Admin force via origin_proposal_id
+  clearAdoptionError: () => void;  // Dismiss error banner
+  
+  // Proposal feed actions
+  addToProposalFeed: (item: Omit<ProposalFeedItem, 'is_promoted'>) => void;
+  isProposalPromoted: (proposalId: string) => boolean;
+  
+  // Simulate All action
+  simulateAll: (framingQuestion?: string) => Promise<void>;
 }
 
 // Default proposal values
@@ -135,6 +204,9 @@ export const useCivicStore = create<CivicState>()(
       proposalPosition: null,
       isDragging: false,
       draggedCard: null,
+      placedItems: [],
+      selectedPlacedItemId: null,
+      worldStateVersion: 0,
       
       simulationResult: null,
       isSimulating: false,
@@ -152,9 +224,13 @@ export const useCivicStore = create<CivicState>()(
       isSendingDM: false,
       sessionId: crypto.randomUUID(),
       
-      // Adopted proposals
+      // Adopted proposals (persistent policies)
       adoptedProposals: [],
       isAdopting: false,
+      adoptionError: null,
+      
+      // Proposal feed (ephemeral results)
+      proposalFeed: [],
       
       history: [],
       selectedHistoryId: null,
@@ -264,6 +340,94 @@ export const useCivicStore = create<CivicState>()(
       setIsDragging: (dragging) => set({ isDragging: dragging }),
       setDraggedCard: (card) => set({ draggedCard: card }),
       
+      // Commit current placement to placedItems array
+      commitPlacement: () => {
+        const { activeProposal, proposalPosition, placedItems, worldStateVersion } = get();
+        console.log('[STORE] commitPlacement called:', { 
+          hasActiveProposal: !!activeProposal, 
+          type: activeProposal?.type,
+          hasPosition: !!proposalPosition,
+          currentCount: placedItems.length 
+        });
+        
+        if (activeProposal && activeProposal.type === 'spatial' && proposalPosition) {
+          const newItem = {
+            id: `placed_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            proposal: activeProposal as SpatialProposal,
+            position: proposalPosition,
+          };
+          const newPlacedItems = [...placedItems, newItem];
+          console.log('[STORE] Adding item:', newItem.id, 'New count:', newPlacedItems.length);
+          
+          set({
+            placedItems: newPlacedItems,
+            worldStateVersion: worldStateVersion + 1,
+            // Clear current placement after committing
+            activeProposal: null,
+            proposalPosition: null,
+          });
+        } else {
+          console.warn('[STORE] commitPlacement skipped - conditions not met');
+        }
+      },
+      
+      removePlacedItem: (id) => {
+        const { placedItems, selectedPlacedItemId, worldStateVersion } = get();
+        console.log('[STORE] removePlacedItem called:', id, 'Current count:', placedItems.length);
+        const newItems = placedItems.filter(item => item.id !== id);
+        console.log('[STORE] After removal:', newItems.length);
+        // Clear selection if the deleted item was selected
+        const newSelection = selectedPlacedItemId === id ? null : selectedPlacedItemId;
+        set({ placedItems: newItems, selectedPlacedItemId: newSelection, worldStateVersion: worldStateVersion + 1 });
+      },
+      
+      setSelectedPlacedItemId: (id) => set({ selectedPlacedItemId: id }),
+      
+      // Build world state summary for agent context
+      buildWorldStateSummary: () => {
+        const { placedItems, adoptedProposals, relationships, worldStateVersion } = get();
+        
+        // Map placed items
+        const placed_items = placedItems.map(item => ({
+          id: item.id,
+          type: item.proposal.spatial_type,
+          title: item.proposal.title,
+          region_id: item.proposal.containing_zone?.id,
+          region_name: item.proposal.containing_zone?.name,
+          radius_km: item.proposal.radius_km || 0.5,
+          emoji: SPATIAL_TYPE_EMOJI[item.proposal.spatial_type] || '📍',
+        }));
+        
+        // Map adopted policies
+        const adopted_policies = adoptedProposals.map(event => ({
+          id: event.id,
+          title: event.proposal.title,
+          summary: event.proposal.summary,
+          outcome: event.outcome,
+          vote_pct: event.vote_summary.agreement_pct,
+          timestamp: event.timestamp,
+        }));
+        
+        // Get top 3 relationship shifts (non-zero scores)
+        const top_relationship_shifts = relationships
+          .filter(r => Math.abs(r.score) > 0.1)
+          .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
+          .slice(0, 3)
+          .map(r => ({
+            from_agent: r.from,
+            to_agent: r.to,
+            score: r.score,
+            reason: r.reason || '',
+          }));
+        
+        return {
+          version: worldStateVersion,
+          placed_items,
+          adopted_policies,
+          top_relationship_shifts,
+        };
+      },
+      
       runSimulation: async () => {
         const { scenario, activeProposal } = get();
         if (!scenario || !activeProposal) return;
@@ -337,6 +501,31 @@ export const useCivicStore = create<CivicState>()(
             agentReactions: response.reactions || [],
             townHall: response.town_hall || null,
           });
+          
+          // Add to proposal feed if we have a proposal and reactions
+          if (response.proposal && response.reactions.length > 0) {
+            const reactions = response.reactions;
+            const support = reactions.filter(r => r.stance === 'support').length;
+            const oppose = reactions.filter(r => r.stance === 'oppose').length;
+            const neutral = reactions.filter(r => r.stance === 'neutral').length;
+            const totalVotes = support + oppose;
+            const agreementPct = totalVotes > 0 ? Math.round((support / totalVotes) * 100) : 0;
+            
+            // Determine source based on context
+            const source: ProposalSource = response.town_hall ? 'townhall' : 'general_chat';
+            
+            const feedItem: Omit<ProposalFeedItem, 'is_promoted'> = {
+              id: `proposal_${response.thread_id}_${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              source,
+              proposal: response.proposal,
+              reactions,
+              vote_summary: { support, oppose, neutral, agreement_pct: agreementPct },
+              can_promote: agreementPct >= 50,
+            };
+            
+            get().addToProposalFeed(feedItem);
+          }
         } else {
           set({
             agentSimulation: null,
@@ -399,11 +588,32 @@ export const useCivicStore = create<CivicState>()(
       },
       
       updateAgentReaction: (agentKey, updates) => {
-        set(state => ({
-          agentReactions: state.agentReactions.map(r =>
+        set(state => {
+          // Update agent reactions
+          const updatedReactions = state.agentReactions.map(r =>
             r.agent_key === agentKey ? { ...r, ...updates } : r
-          ),
-        }));
+          );
+          
+          // If stance changed, also update zoneSentiments (agent_key == zone_id)
+          let updatedZoneSentiments = state.zoneSentiments;
+          if (updates.stance !== undefined || updates.intensity !== undefined) {
+            updatedZoneSentiments = state.zoneSentiments.map(z => {
+              if (z.zone_id === agentKey) {
+                const newStance = updates.stance ?? state.agentReactions.find(r => r.agent_key === agentKey)?.stance ?? z.sentiment;
+                const newIntensity = updates.intensity ?? state.agentReactions.find(r => r.agent_key === agentKey)?.intensity ?? Math.abs(z.score);
+                // Convert stance + intensity to score (-1 to +1)
+                const newScore = newStance === 'support' ? newIntensity : newStance === 'oppose' ? -newIntensity : 0;
+                return { ...z, sentiment: newStance, score: newScore };
+              }
+              return z;
+            });
+          }
+          
+          return {
+            agentReactions: updatedReactions,
+            zoneSentiments: updatedZoneSentiments,
+          };
+        });
       },
       
       loadRelationships: async (sessionId) => {
@@ -432,8 +642,35 @@ export const useCivicStore = create<CivicState>()(
         isSendingDM: false,
       }),
       
+      // Proposal feed actions
+      addToProposalFeed: (item) => {
+        const { adoptedProposals, proposalFeed } = get();
+        // Check if already promoted (idempotent)
+        const isPromoted = adoptedProposals.some(p => p.origin_proposal_id === item.id);
+        // Check if already in feed
+        const existsInFeed = proposalFeed.some(p => p.id === item.id);
+        if (existsInFeed) {
+          // Update existing entry
+          set(state => ({
+            proposalFeed: state.proposalFeed.map(p => 
+              p.id === item.id ? { ...item, is_promoted: isPromoted } : p
+            ),
+          }));
+        } else {
+          // Add new entry
+          set(state => ({
+            proposalFeed: [{ ...item, is_promoted: isPromoted }, ...state.proposalFeed],
+          }));
+        }
+      },
+      
+      isProposalPromoted: (proposalId) => {
+        const { adoptedProposals } = get();
+        return adoptedProposals.some(p => p.origin_proposal_id === proposalId);
+      },
+      
       // Adoption actions
-      adoptProposal: async (proposal, reactions, sessionId) => {
+      adoptProposal: async (proposal, reactions, sessionId, originProposalId) => {
         set({ isAdopting: true });
         try {
           // Calculate vote tally
@@ -461,6 +698,17 @@ export const useCivicStore = create<CivicState>()(
             sentiment_shift: z.sentiment === 'support' ? 0.5 : z.sentiment === 'oppose' ? -0.5 : 0,
           }));
           
+          // Generate origin proposal ID if not provided
+          const effectiveOriginId = originProposalId || `proposal_${Date.now()}`;
+          
+          // Check idempotency - don't adopt if already adopted
+          const { adoptedProposals } = get();
+          if (adoptedProposals.some(p => p.origin_proposal_id === effectiveOriginId)) {
+            console.warn('[STORE] Proposal already promoted, skipping:', effectiveOriginId);
+            set({ isAdopting: false });
+            return;
+          }
+          
           // Create adopted event
           const adoptedEvent: AdoptedEvent = {
             id: `adopted_${Date.now()}`,
@@ -468,6 +716,7 @@ export const useCivicStore = create<CivicState>()(
             session_id: sessionId,
             proposal,
             outcome: 'adopted',
+            origin_proposal_id: effectiveOriginId,
             vote_summary: { support, oppose, neutral, agreement_pct: agreementPct },
             key_quotes: keyQuotes,
             zone_deltas: zoneDeltas,
@@ -476,19 +725,26 @@ export const useCivicStore = create<CivicState>()(
           // Call backend to persist in agent threads
           await api.adoptProposal(sessionId, adoptedEvent);
           
-          // Add to local state
+          // Add to local state and increment world state version
           set(state => ({
             adoptedProposals: [...state.adoptedProposals, adoptedEvent],
+            // Mark as promoted in proposalFeed
+            proposalFeed: state.proposalFeed.map(p =>
+              p.id === effectiveOriginId ? { ...p, is_promoted: true } : p
+            ),
+            worldStateVersion: state.worldStateVersion + 1,
             isAdopting: false,
+            adoptionError: null,  // Clear any previous error
           }));
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to promote policy';
           console.error('Failed to adopt proposal:', error);
-          set({ isAdopting: false });
-          throw error;
+          set({ isAdopting: false, adoptionError: errorMessage });
+          // Don't rethrow - error is captured in state for UI display
         }
       },
       
-      forceForwardProposal: async (proposal, reactions, sessionId) => {
+      forceForwardProposal: async (proposal, reactions, sessionId, originProposalId) => {
         set({ isAdopting: true });
         try {
           // Calculate vote tally
@@ -516,6 +772,17 @@ export const useCivicStore = create<CivicState>()(
             sentiment_shift: z.sentiment === 'support' ? 0.5 : z.sentiment === 'oppose' ? -0.5 : 0,
           }));
           
+          // Generate origin proposal ID if not provided
+          const effectiveOriginId = originProposalId || `proposal_${Date.now()}`;
+          
+          // Check idempotency - don't adopt if already adopted
+          const { adoptedProposals } = get();
+          if (adoptedProposals.some(p => p.origin_proposal_id === effectiveOriginId)) {
+            console.warn('[STORE] Proposal already promoted, skipping:', effectiveOriginId);
+            set({ isAdopting: false });
+            return;
+          }
+          
           // Create adopted event (forced)
           const adoptedEvent: AdoptedEvent = {
             id: `adopted_${Date.now()}`,
@@ -523,6 +790,7 @@ export const useCivicStore = create<CivicState>()(
             session_id: sessionId,
             proposal,
             outcome: 'forced',
+            origin_proposal_id: effectiveOriginId,
             vote_summary: { support, oppose, neutral, agreement_pct: agreementPct },
             key_quotes: keyQuotes,
             zone_deltas: zoneDeltas,
@@ -531,15 +799,121 @@ export const useCivicStore = create<CivicState>()(
           // Call backend to persist in agent threads
           await api.adoptProposal(sessionId, adoptedEvent);
           
-          // Add to local state
+          // Add to local state and increment world state version
           set(state => ({
             adoptedProposals: [...state.adoptedProposals, adoptedEvent],
+            // Mark as promoted in proposalFeed
+            proposalFeed: state.proposalFeed.map(p =>
+              p.id === effectiveOriginId ? { ...p, is_promoted: true } : p
+            ),
+            worldStateVersion: state.worldStateVersion + 1,
             isAdopting: false,
+            adoptionError: null,  // Clear any previous error
           }));
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to force policy';
           console.error('Failed to force forward proposal:', error);
-          set({ isAdopting: false });
-          throw error;
+          set({ isAdopting: false, adoptionError: errorMessage });
+          // Don't rethrow - error is captured in state for UI display
+        }
+      },
+      
+      // Promote to Policy - find in feed and adopt (convenience method)
+      promoteToPolicy: async (proposalId) => {
+        const { proposalFeed, adoptProposal, sessionId } = get();
+        const feedItem = proposalFeed.find(p => p.id === proposalId);
+        
+        if (!feedItem) {
+          console.error('[STORE] promoteToPolicy: Proposal not found in feed:', proposalId);
+          return;
+        }
+        
+        if (!feedItem.can_promote) {
+          console.error('[STORE] promoteToPolicy: Proposal does not meet threshold:', proposalId);
+          return;
+        }
+        
+        if (feedItem.is_promoted) {
+          console.warn('[STORE] promoteToPolicy: Already promoted:', proposalId);
+          return;
+        }
+        
+        await adoptProposal(feedItem.proposal, feedItem.reactions, sessionId, proposalId);
+      },
+      
+      // Force Policy - find in feed and force adopt (admin override)
+      forcePolicy: async (proposalId) => {
+        const { proposalFeed, forceForwardProposal, sessionId } = get();
+        const feedItem = proposalFeed.find(p => p.id === proposalId);
+        
+        if (!feedItem) {
+          console.error('[STORE] forcePolicy: Proposal not found in feed:', proposalId);
+          return;
+        }
+        
+        if (feedItem.is_promoted) {
+          console.warn('[STORE] forcePolicy: Already promoted:', proposalId);
+          return;
+        }
+        
+        await forceForwardProposal(feedItem.proposal, feedItem.reactions, sessionId, proposalId);
+      },
+      
+      // Clear adoption error (dismiss banner)
+      clearAdoptionError: () => {
+        set({ adoptionError: null });
+      },
+      
+      // Simulate All action - evaluates combined effects of all placed items
+      simulateAll: async (framingQuestion?: string) => {
+        const { scenario, placedItems, sessionId, buildWorldStateSummary, setAgentSimulation } = get();
+        
+        if (!scenario) {
+          console.warn('[STORE] simulateAll: No scenario loaded');
+          return;
+        }
+        
+        if (placedItems.length === 0) {
+          console.warn('[STORE] simulateAll: No placed items to simulate');
+          return;
+        }
+        
+        set({ isSimulating: true });
+        
+        try {
+          // Build world state
+          const worldState = buildWorldStateSummary();
+          
+          // Auto-generate evaluation prompt
+          const itemDescriptions = placedItems.map(item => {
+            const emoji = SPATIAL_TYPE_EMOJI[item.proposal.spatial_type] || '📍';
+            const region = item.proposal.containing_zone?.name || 'unknown area';
+            return `${emoji} ${item.proposal.title} in ${region}`;
+          });
+          
+          let message = `Evaluate the combined effects of ${placedItems.length} placed buildings:\n${itemDescriptions.join('\n')}`;
+          
+          // Add optional framing question
+          if (framingQuestion?.trim()) {
+            message += `\n\nSpecific question: ${framingQuestion.trim()}`;
+          }
+          
+          // Import ai-api dynamically to avoid circular deps
+          const aiApi = await import('../lib/ai-api');
+          
+          const response = await aiApi.chat({
+            message,
+            scenario_id: scenario.id,
+            session_id: sessionId,
+            world_state: worldState,
+          });
+          
+          setAgentSimulation(response);
+          
+        } catch (error) {
+          console.error('[STORE] simulateAll failed:', error);
+        } finally {
+          set({ isSimulating: false });
         }
       },
     }),

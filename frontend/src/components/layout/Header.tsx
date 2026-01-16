@@ -1,5 +1,6 @@
 import { useCivicStore } from '../../store';
 import { Button, Badge } from '../ui';
+import kingstonZones from '../../data/kingston-zones.json';
 
 export function Header() {
   const { 
@@ -13,6 +14,8 @@ export function Header() {
     autoSimulate,
     setAutoSimulate,
   } = useCivicStore();
+  
+  const regionCount = Math.max(scenario?.clusters?.length ?? 0, kingstonZones.features.length);
   
   return (
     <header className="h-14 bg-civic-surface border-b border-civic-border flex items-center justify-between px-4 shrink-0">
@@ -31,18 +34,17 @@ export function Header() {
         </button>
         
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold text-civic-text">CivicSim</h1>
-          <Badge variant="default">Beta</Badge>
+          <h1 className="text-lg font-semibold text-civic-text">GeoCiv AI</h1>
         </div>
       </div>
-      
-      {/* Center section - Scenario */}
-      <div className="flex items-center gap-3">
+            
+      {/* Right section - Scenario + controls */}
+      <div className="flex items-center gap-4 ml-auto">
         {scenario ? (
           <div className="flex items-center gap-2">
             <span className="text-sm text-civic-text-secondary">Scenario:</span>
             <span className="text-sm font-medium text-civic-text">{scenario.name}</span>
-            <Badge variant="support">{scenario.clusters.length} regions</Badge>
+            <Badge variant="support">{regionCount} regions</Badge>
           </div>
         ) : (
           <Button 
@@ -53,10 +55,7 @@ export function Header() {
             Load Kingston Demo
           </Button>
         )}
-      </div>
-      
-      {/* Right section */}
-      <div className="flex items-center gap-4">
+        
         <label className="flex items-center gap-2 cursor-pointer">
           <span className="text-xs text-civic-text-secondary">Auto-simulate</span>
           <button
@@ -87,4 +86,3 @@ export function Header() {
     </header>
   );
 }
-

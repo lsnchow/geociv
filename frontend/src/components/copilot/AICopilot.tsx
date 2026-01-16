@@ -30,10 +30,13 @@ export function AICopilot() {
     loadRelationships,
     sessionId,
     agentSimulation,
+    buildWorldStateSummary,
   } = useCivicStore();
   
   // DM mode: both speaker and target are set (and target is not 'all')
-  const dmModeActive = speakingAsAgent !== null && targetAgent !== null && targetAgent !== 'all';
+  // Use typeof check for proper type narrowing
+  const isTargetAgentObject = targetAgent !== null && typeof targetAgent === 'object';
+  const dmModeActive = speakingAsAgent !== null && isTargetAgentObject;
   
   // #region agent log
   useEffect(() => {
@@ -79,7 +82,7 @@ export function AICopilot() {
     if (!input.trim() || !scenario || isProcessing) return;
     
     // Block send if target is set but no speaker
-    if (targetAgent && targetAgent !== 'all' && !speakingAsAgent) {
+    if (targetAgent && isTargetAgentObject && !speakingAsAgent) {
       setBackboardError('Select a speaker first (click an agent card)');
       return;
     }
@@ -91,7 +94,7 @@ export function AICopilot() {
       // Tag as DM if in DM mode
       isDM: dmModeActive,
       dmFrom: dmModeActive ? speakingAsAgent?.name : undefined,
-      dmTo: dmModeActive && targetAgent !== 'all' ? targetAgent?.name : undefined,
+      dmTo: dmModeActive && isTargetAgentObject ? targetAgent?.name : undefined,
     };
     
     setMessages(prev => [...prev, userMessage]);
@@ -101,7 +104,7 @@ export function AICopilot() {
     
     try {
       // ========== DM MODE: Call /v1/ai/dm ==========
-      if (dmModeActive && targetAgent !== 'all') {
+      if (dmModeActive && isTargetAgentObject) {
         const dmResponse = await api.sendDM({
           session_id: sessionId,
           from_agent_key: speakingAsAgent!.key,
@@ -136,6 +139,9 @@ export function AICopilot() {
         
       } else {
         // ========== NORMAL MODE: Call /v1/ai/chat ==========
+        // Build world state context for all chat messages
+        const worldState = buildWorldStateSummary();
+        
         const response: SimulationResponse = await aiApi.chat({
           message: userMessage.content,
           scenario_id: scenario.id,
@@ -143,6 +149,7 @@ export function AICopilot() {
           auto_simulate: true,
           speaker_mode: speakingAsAgent ? 'agent' : 'user',
           speaker_agent_key: speakingAsAgent?.key,
+          world_state: worldState,
         });
         
         // Store thread_id for conversation continuity
@@ -226,7 +233,7 @@ export function AICopilot() {
         <div className="flex items-center justify-between px-4 py-2 border-b border-civic-border bg-civic-bg/50">
           <div className="flex items-center gap-2">
             <span className="text-civic-accent">⌘K</span>
-            <span className="text-sm font-medium text-civic-text">CivicSim AI</span>
+            <span className="text-sm font-medium text-civic-text">GeoCiv AI</span>
             {threadId && !dmModeActive && (
               <Badge variant="default" size="sm">Thread Active</Badge>
             )}
@@ -248,7 +255,7 @@ export function AICopilot() {
         </div>
         
         {/* DM Mode Banner */}
-        {dmModeActive && targetAgent !== 'all' && (
+        {dmModeActive && isTargetAgentObject && (
           <div className="px-4 py-2 bg-purple-500/20 border-b border-purple-500/30 flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-purple-400 font-medium">DM:</span>
@@ -300,7 +307,7 @@ export function AICopilot() {
           {messages.length === 0 && (
             <div className="text-center py-8">
               <p className="text-civic-text-secondary text-sm">
-                Describe a proposal and see how 6 stakeholders react.
+                Describe a proposal and see how 7 stakeholders react.
               </p>
               <p className="text-civic-text-tertiary text-xs mt-2">
                 Try: "Double the size of all parks" or "$50 grocery rebate for low income residents"
@@ -385,7 +392,7 @@ export function AICopilot() {
               <div className={`rounded-lg px-4 py-3 ${dmModeActive ? 'bg-purple-500/20 text-purple-300' : 'bg-civic-elevated text-civic-text'}`}>
                 <div className="flex items-center gap-2">
                   <span className="animate-spin">🔄</span>
-                  <span>{dmModeActive ? `Waiting for ${targetAgent !== 'all' ? targetAgent?.name : 'agent'} to respond...` : 'Simulating community reactions...'}</span>
+                  <span>{dmModeActive ? `Waiting for ${isTargetAgentObject ? targetAgent?.name : 'agent'} to respond...` : 'Simulating community reactions...'}</span>
                 </div>
               </div>
             </div>
@@ -401,7 +408,7 @@ export function AICopilot() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={dmModeActive && targetAgent !== 'all'
+            placeholder={dmModeActive && isTargetAgentObject
               ? `Message ${targetAgent.name} as ${speakingAsAgent?.name}...`
               : speakingAsAgent 
                 ? `Speak as ${speakingAsAgent.name}...` 
@@ -426,9 +433,9 @@ export function AICopilot() {
             <kbd className="px-1 py-0.5 bg-civic-muted rounded text-[9px]">ESC</kbd> to close
           </div>
           <div className="text-[10px] text-civic-text-secondary flex items-center gap-2">
-            <span>👥 6 Agents</span>
+            <span>👥 7 Agents</span>
             <span>•</span>
-            <span>🗺️ 4 Zones</span>
+            <span>🗺️ 7 Zones</span>
             <span>•</span>
             <span>🏛️ Town Hall</span>
           </div>
