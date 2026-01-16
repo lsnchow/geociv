@@ -46,7 +46,7 @@ Respond with ONLY valid JSON:
 - zones_most_affected: list of zones you think are most impacted, each with zone_id, effect (support/oppose/neutral), intensity
 - proposed_amendments: 0-3 changes you'd propose to improve it
 
-Available zone_ids: north_end, university, west_kingston, downtown, industrial, waterfront_west, sydenham
+Available zone_ids: {available_zone_ids}
 
 Respond with JSON only."""
 
@@ -147,6 +147,9 @@ class AgentReactor:
                 else:  # far
                     vicinity_context = f"\nPROXIMITY: This proposal is FAR from your region ({region_name}). It will have minimal direct effect on your community, but you may still have opinions."
         
+        # Build list of available zone IDs
+        available_zone_ids = ", ".join(z["id"] for z in ZONES)
+        
         prompt = REACTION_PROMPT.format(
             agent_name=agent.get("display_name", agent.get("name", "Agent")),
             agent_role=agent["role"],
@@ -160,6 +163,7 @@ class AgentReactor:
             proposal_summary=proposal.summary,
             affected_zones=affected,
             vicinity_context=vicinity_context,
+            available_zone_ids=available_zone_ids,
         )
         
         try:

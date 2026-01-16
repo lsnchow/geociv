@@ -23,13 +23,27 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 // Default agent avatars by region (agent_key == region_id)
 const DEFAULT_AGENTS: Record<string, { avatar: string; name: string; role: string }> = {
-  north_end: { avatar: '👨‍👩‍👧‍👦', name: 'Patricia Lawson', role: 'North End Parent' },
-  university: { avatar: '🎓', name: 'Jordan Okafor', role: "Queen's Student Rep" },
-  west_kingston: { avatar: '🏡', name: 'Helen Drummond', role: 'West End Homeowner' },
-  downtown: { avatar: '☕', name: 'Marcus Chen', role: 'Downtown Business Owner' },
-  industrial: { avatar: '🏭', name: 'Dave Kowalski', role: 'Trades & Jobs Advocate' },
-  waterfront_west: { avatar: '🌊', name: 'Priya Sharma', role: 'Waterfront Housing Renter' },
-  sydenham: { avatar: '✊', name: 'Keisha Williams', role: 'Sydenham Organizer' },
+  queens_west: { avatar: '🏃', name: 'Marcus Thompson', role: 'Varsity Athlete & Res Life Staff' },
+  queens_main: { avatar: '👩‍🔬', name: 'Dr. Priya Sharma', role: 'Engineering Professor' },
+  union_stuart: { avatar: '💻', name: 'Jordan Chen', role: 'Remote Tech Worker' },
+  kingscourt: { avatar: '🏡', name: 'Barbara Mitchell', role: 'Retired Nurse' },
+  williamsville: { avatar: '🔧', name: 'Tony Marchetti', role: 'Auto Repair Shop Owner' },
+  portsmouth: { avatar: '🏛️', name: 'Eleanor Whitfield', role: 'Historical Society President' },
+  cataraqui_west: { avatar: '👨‍👩‍👧', name: 'Aisha & Omar Hassan', role: 'First-Time Homebuyers' },
+  highway_15_corridor: { avatar: '📦', name: 'Derek Fowler', role: 'Logistics Worker & Union Rep' },
+  strathcona_park: { avatar: '⚖️', name: 'Catherine Blackwood', role: 'Corporate Lawyer' },
+  victoria_park: { avatar: '🤝', name: 'Kenji Nakamura', role: 'Nonprofit Director' },
+  north_end: { avatar: '👩‍🏫', name: 'Michelle Tremblay', role: 'Elementary School Teacher' },
+  skeleton_park: { avatar: '🎨', name: 'River Songbird', role: 'Muralist & Community Artist' },
+  inner_harbour: { avatar: '⛵', name: 'Captain Bob MacLeod', role: 'Marina Owner & Sailing Instructor' },
+  sydenham: { avatar: '🏠', name: 'Denise Williams', role: 'Tenant Rights Organizer' },
+  johnson_triangle: { avatar: '🚌', name: 'Aaliyah Jackson', role: 'Student & Transit Advocate' },
+  calvin_park: { avatar: '🏒', name: 'Greg Patterson', role: 'Insurance Broker & Hockey Dad' },
+  rideau_heights: { avatar: '🌍', name: 'Fatima Osman', role: 'Settlement Worker' },
+  henderson: { avatar: '👴', name: 'Harold & Marge Simpson', role: 'Retired City Workers' },
+  market_square: { avatar: '🍝', name: 'Franco Benedetti', role: 'Downtown Restaurateur' },
+  cataraqui_centre: { avatar: '🛒', name: 'Stephanie Patel', role: 'Mall Store Manager' },
+  lake_ontario_park: { avatar: '🌿', name: 'Dr. Sarah Green', role: 'Environmental Scientist' },
 };
 
 // ============================================================================
