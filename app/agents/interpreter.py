@@ -131,6 +131,14 @@ class ProposalInterpreter:
                 loc = p.get("location", {})
                 params = p.get("parameters", {})
                 
+                # Coerce target_group to string if LLM returned wrong type
+                target_group = params.get("target_group")
+                if target_group is not None and not isinstance(target_group, str):
+                    if isinstance(target_group, list):
+                        target_group = ", ".join(str(g) for g in target_group) if target_group else None
+                    else:
+                        target_group = str(target_group)
+                
                 proposal = InterpretedProposal(
                     type=p.get("type", "policy"),
                     title=p.get("title", "Untitled Proposal"),
@@ -144,7 +152,7 @@ class ProposalInterpreter:
                     parameters=ProposalParameters(
                         scale=params.get("scale", 1.0),
                         budget_millions=params.get("budget_millions"),
-                        target_group=params.get("target_group"),
+                        target_group=target_group,
                     ),
                 )
             
