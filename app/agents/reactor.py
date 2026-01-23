@@ -176,7 +176,8 @@ class AgentReactor:
             response_text = await self.client.send_message(
                 thread_id, 
                 prompt,
-                caller_context=f"reactor.react[{agent_key}]"
+                caller_context=f"reactor.react[{agent_key}]",
+                request_type="agent"
             )
             
             logger.info(f"[REACTOR] session={session_id} agent={agent_key} response_len={len(response_text)}")

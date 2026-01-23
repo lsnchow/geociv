@@ -5,6 +5,7 @@ import time
 from typing import Optional
 from app.config import get_settings
 from app.logging_config import get_logger
+from app.services.llm_metrics import LLMCallLogger
 
 logger = get_logger('backboard')
 
@@ -91,6 +92,7 @@ class BackboardClient:
         model: str = "gemini-2.0-flash-exp",
         provider: str = "google",
         caller_context: str = "unknown",
+        request_type: str = "unknown",  # interpreter | agent | reducer
     ) -> str:
         """Send message to thread. Returns assistant response text.
         
@@ -119,34 +121,49 @@ class BackboardClient:
             f"input_length={len(content)} chars | input_tokens_est={input_tokens_estimate}"
         )
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, headers=self.headers, data=form_data)
+        # Use LLM metrics logger
+        async with LLMCallLogger(
+            request_type=request_type,
+            model=model,
+            provider=provider,
+            prompt_chars=len(content),
+            max_tokens=2048,  # Default, could be parameterized
+            caller_context=caller_context,
+        ) as metrics_logger:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                metrics_logger.mark_send()  # Mark when HTTP request is sent
+                resp = await client.post(url, headers=self.headers, data=form_data)
         
-        ttft = time.time() - start_time  # Time to first token (response received)
-        
-        if resp.status_code != 200:
-            logger.error(
-                f"✗ BACKBOARD_SEND_MESSAGE_FAILED | status={resp.status_code} | error={resp.text[:200]} | ttft={ttft:.3f}s"
+            ttft = time.time() - start_time  # Time to first token (response received)
+            
+            if resp.status_code != 200:
+                logger.error(
+                    f"✗ BACKBOARD_SEND_MESSAGE_FAILED | status={resp.status_code} | error={resp.text[:200]} | ttft={ttft:.3f}s"
+                )
+                metrics_logger.set_error(f"http_{resp.status_code}")
+                raise BackboardError(resp.status_code, resp.text)
+            
+            data = resp.json()
+            # Parse response: content || text else error
+            message = data.get("content") or data.get("text")
+            if not message:
+                logger.error(f"✗ BACKBOARD_SEND_MESSAGE_NO_CONTENT | keys={list(data.keys())} | ttft={ttft:.3f}s")
+                metrics_logger.set_error("no_content")
+                raise BackboardError(500, f"No content in response: {data}")
+            
+            # Record output in metrics
+            metrics_logger.set_output(message, status="success")
+            
+            total_time = time.time() - start_time
+            output_tokens_estimate = len(message) // 4
+            total_tokens = input_tokens_estimate + output_tokens_estimate
+            
+            logger.info(
+                f"✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller={caller_context} | thread_id={thread_id} | "
+                f"output_length={len(message)} chars | output_tokens_est={output_tokens_estimate} | "
+                f"ttft={ttft:.3f}s (time to first token) | total={total_time:.3f}s | "
+                f"tokens_per_sec={total_tokens / total_time:.0f}"
             )
-            raise BackboardError(resp.status_code, resp.text)
-        
-        data = resp.json()
-        # Parse response: content || text else error
-        message = data.get("content") or data.get("text")
-        if not message:
-            logger.error(f"✗ BACKBOARD_SEND_MESSAGE_NO_CONTENT | keys={list(data.keys())} | ttft={ttft:.3f}s")
-            raise BackboardError(500, f"No content in response: {data}")
-        
-        total_time = time.time() - start_time
-        output_tokens_estimate = len(message) // 4
-        total_tokens = input_tokens_estimate + output_tokens_estimate
-        
-        logger.info(
-            f"✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller={caller_context} | thread_id={thread_id} | "
-            f"output_length={len(message)} chars | output_tokens_est={output_tokens_estimate} | "
-            f"ttft={ttft:.3f}s (time to first token) | total={total_time:.3f}s | "
-            f"tokens_per_sec={total_tokens / total_time:.0f}"
-        )
-        
-        return message
+            
+            return message
 

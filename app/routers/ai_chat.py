@@ -25,6 +25,7 @@ from app.schemas.multi_agent import (
     MultiAgentResponse,
 )
 from app.schemas.proposal import WorldStateSummary
+from app.services.llm_metrics import reset_metrics, log_action_summary, set_wave_index
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,9 @@ async def ai_chat(request: AIChatRequest):
     """
     start_time = time.time()
     
+    # Reset metrics for this action
+    reset_metrics()
+    
     # Validate non-empty message
     if not request.message.strip():
         raise HTTPException(
@@ -111,6 +115,7 @@ async def ai_chat(request: AIChatRequest):
         
         # Step 1: Interpret proposal
         logger.info("[SIM] Step 1: Interpreting proposal...")
+        set_wave_index(0)  # Wave 0 = interpretation
         interpreter = ProposalInterpreter(client)
         interpret_result = await interpreter.interpret(effective_message, session_id)
         
@@ -144,6 +149,7 @@ async def ai_chat(request: AIChatRequest):
         
         # Step 2: Get agent reactions (parallel)
         logger.info("[SIM] Step 2: Getting agent reactions...")
+        set_wave_index(1)  # Wave 1 = agent reactions
         reactor = AgentReactor(client)
         # Pass build_proposal vicinity data if available (from drag-drop build mode)
         vicinity_data = request.build_proposal if request.build_proposal else None
@@ -160,6 +166,7 @@ async def ai_chat(request: AIChatRequest):
         
         # Step 4: Generate Town Hall transcript
         logger.info("[SIM] Step 4: Generating Town Hall...")
+        set_wave_index(2)  # Wave 2 = reducer/townhall
         townhall_gen = TownHallGenerator(client)
         town_hall = await townhall_gen.generate(proposal, reactions, session_id)
         logger.info(f"[SIM] Generated transcript with {len(town_hall.turns)} turns")
@@ -181,6 +188,14 @@ async def ai_chat(request: AIChatRequest):
         run_hash = hashlib.md5(
             f"{proposal.title}:{session_id}:{datetime.datetime.utcnow().isoformat()}".encode()
         ).hexdigest()[:12]
+        
+        # Log summary metrics for this action
+        log_action_summary(
+            num_agents=len(reactions),
+            max_concurrency=len(AGENTS),  # All agents run in parallel
+            total_wall_ms=duration_ms,
+            action_type="proposal"
+        )
         
         return MultiAgentResponse(
             session_id=session_id,

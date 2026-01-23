@@ -75,7 +75,8 @@ class ProposalInterpreter:
             response_text = await self.client.send_message(
                 session.interpreter_thread_id, 
                 prompt,
-                caller_context="interpreter.interpret"
+                caller_context="interpreter.interpret",
+                request_type="interpreter"
             )
             
             logger.info(f"[INTERPRETER] session={session_id} response_len={len(response_text)}")

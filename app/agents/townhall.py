@@ -91,7 +91,8 @@ class TownHallGenerator:
             response_text = await self.client.send_message(
                 session.townhall_thread_id, 
                 prompt,
-                caller_context="townhall.generate"
+                caller_context="townhall.generate",
+                request_type="reducer"
             )
             
             logger.info(f"[TOWNHALL] session={session_id} response_len={len(response_text)}")
