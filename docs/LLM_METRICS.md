@@ -32,8 +32,8 @@ Each LLM call emits one JSON object with the following fields:
 - `max_tokens` - Max tokens parameter sent to LLM
 
 ### Model Metadata
-- `provider` - Provider name (e.g., "google", "amazon")
-- `model` - Model name (e.g., "gemini-2.0-flash-exp")
+- `provider` - Provider name (e.g., "amazon")
+- `model` - Model name (e.g., "amazon/nova-micro-v1")
 - `wrapper` - Always "backboard"
 - `request_type` - One of: "interpreter", "agent", "reducer"
 - `caller_context` - Detailed context string for debugging
@@ -59,8 +59,8 @@ Each LLM call emits one JSON object with the following fields:
     "prompt_tokens_est": 375,
     "output_tokens_est": 4,
     "max_tokens": 2048,
-    "provider": "google",
-    "model": "gemini-2.0-flash-exp",
+    "provider": "amazon",
+    "model": "amazon/nova-micro-v1",
     "wrapper": "backboard",
     "request_type": "agent",
     "caller_context": "reactor.react[developer]",
@@ -134,7 +134,7 @@ grep '"request_type": "agent"' logs/llm_metrics.jsonl | \
   jq -r '[.inflight_at_start, .latency_total_ms] | @tsv'
 ```
 
-### 4. Model comparison (Amazon Nova vs Gemini)
+### 4. Model comparison (provider/model averages)
 ```bash
 # Average latency by provider
 jq -r 'select(.status=="success") | [.provider, .model, .latency_total_ms] | @tsv' \

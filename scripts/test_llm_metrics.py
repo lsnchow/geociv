@@ -29,8 +29,8 @@ async def test_single_call():
     
     async with LLMCallLogger(
         request_type="interpreter",
-        model="gemini-2.0-flash-exp",
-        provider="google",
+        model="amazon/nova-micro-v1",
+        provider="amazon",
         prompt_chars=1234,
         max_tokens=2048,
         caller_context="test.interpreter"
@@ -54,8 +54,8 @@ async def test_multi_agent_flow():
     set_wave_index(0)
     async with LLMCallLogger(
         request_type="interpreter",
-        model="gemini-2.0-flash-exp",
-        provider="google",
+        model="amazon/nova-micro-v1",
+        provider="amazon",
         prompt_chars=2000,
         max_tokens=2048,
         caller_context="test.interpreter"
@@ -71,8 +71,8 @@ async def test_multi_agent_flow():
         async def agent_call(agent_num):
             async with LLMCallLogger(
                 request_type="agent",
-                model="gemini-2.0-flash-exp",
-                provider="google",
+                model="amazon/nova-micro-v1",
+                provider="amazon",
                 prompt_chars=1500,
                 max_tokens=2048,
                 caller_context=f"test.agent_{agent_num}"
@@ -89,8 +89,8 @@ async def test_multi_agent_flow():
     set_wave_index(2)
     async with LLMCallLogger(
         request_type="reducer",
-        model="gemini-2.0-flash-exp",
-        provider="google",
+        model="amazon/nova-micro-v1",
+        provider="amazon",
         prompt_chars=3000,
         max_tokens=2048,
         caller_context="test.townhall"
@@ -136,8 +136,8 @@ async def test_error_handling():
     try:
         async with LLMCallLogger(
             request_type="agent",
-            model="gemini-2.0-flash-exp",
-            provider="google",
+            model="amazon/nova-micro-v1",
+            provider="amazon",
             prompt_chars=1000,
             max_tokens=2048,
             caller_context="test.error"
