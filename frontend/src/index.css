@@ -33,6 +33,15 @@
   src: url('https://fonts.gstatic.com/s/jetbrainsmono/v18/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPVmUsaaDhw.woff2') format('woff2');
 }
 
+/* Instrument Serif for landing page headings */
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/instrumentserif/v4/jizBRFtNs2ka5fXjeivQ4LroWlx-2zIZj1bIkNo.woff2') format('woff2');
+}
+
 * {
   box-sizing: border-box;
 }
@@ -75,4 +84,64 @@ html, body, #root {
 
 .maplibregl-ctrl-attrib {
   display: none !important;
+}
+
+/* ============================================================================
+   Landing Page Animations
+   ============================================================================ */
+
+/* Fade in and slide up animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Slow pan animation for background - subtle cinematic movement */
+@keyframes slowPan {
+  0% {
+    transform: scale(1.05) translate(0, 0);
+  }
+  25% {
+    transform: scale(1.08) translate(-1%, -0.5%);
+  }
+  50% {
+    transform: scale(1.06) translate(0.5%, -1%);
+  }
+  75% {
+    transform: scale(1.07) translate(-0.5%, 0.5%);
+  }
+  100% {
+    transform: scale(1.05) translate(0, 0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+
+.animate-slow-pan {
+  animation: slowPan 60s ease-in-out infinite;
+}
+
+.animate-delay-200 {
+  animation-delay: 0.2s;
+}
+
+.animate-delay-400 {
+  animation-delay: 0.4s;
+}
+
+.animate-delay-600 {
+  animation-delay: 0.6s;
+}
+
+/* Font utility for landing page */
+.font-serif {
+  font-family: 'Instrument Serif', Georgia, serif;
 }

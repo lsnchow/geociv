@@ -79,13 +79,20 @@ class TownHallGenerator:
                         system_prompt="You moderate town hall meetings and generate realistic debate transcripts. Respond with valid JSON only."
                     )
                     logger.info(f"[TOWNHALL] Created assistant={session.townhall_assistant_id}")
-                session.townhall_thread_id = await self.client.create_thread(session.townhall_assistant_id)
+                session.townhall_thread_id = await self.client.create_thread(
+                    session.townhall_assistant_id,
+                    caller_context="townhall.generate"
+                )
                 logger.info(f"[TOWNHALL] Created thread={session.townhall_thread_id} for session={session_id}")
             
             logger.info(f"[TOWNHALL] session={session_id} thread={session.townhall_thread_id} content_len={len(prompt)}")
             
             # Send to Backboard (returns string directly)
-            response_text = await self.client.send_message(session.townhall_thread_id, prompt)
+            response_text = await self.client.send_message(
+                session.townhall_thread_id, 
+                prompt,
+                caller_context="townhall.generate"
+            )
             
             logger.info(f"[TOWNHALL] session={session_id} response_len={len(response_text)}")
             

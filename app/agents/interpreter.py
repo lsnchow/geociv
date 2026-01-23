@@ -64,14 +64,19 @@ class ProposalInterpreter:
                     )
                     logger.info(f"[INTERPRETER] Created assistant={session.interpreter_assistant_id}")
                 session.interpreter_thread_id = await self.client.create_thread(
-                    session.interpreter_assistant_id
+                    session.interpreter_assistant_id,
+                    caller_context="interpreter.interpret"
                 )
                 logger.info(f"[INTERPRETER] Created thread={session.interpreter_thread_id} for session={session_id}")
             
             logger.info(f"[INTERPRETER] session={session_id} thread={session.interpreter_thread_id} content_len={len(prompt)}")
             
             # Send to Backboard (returns string directly)
-            response_text = await self.client.send_message(session.interpreter_thread_id, prompt)
+            response_text = await self.client.send_message(
+                session.interpreter_thread_id, 
+                prompt,
+                caller_context="interpreter.interpret"
+            )
             
             logger.info(f"[INTERPRETER] session={session_id} response_len={len(response_text)}")
             

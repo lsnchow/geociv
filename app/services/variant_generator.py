@@ -247,8 +247,8 @@ class VariantGenerator:
                     "content": prompt,
                     "memory": "off",
                     "web_search": "off",
-                    "llm_provider": "google",
-                    "model_name": "gemini-2.5-flash",
+                    "llm_provider": "openai",
+                    "model_name": "gpt-4o",
                     "stream": "false",
                 },
             )
@@ -649,3 +649,4 @@ async def generate_variants(
     return await generator.generate_variants(
         base_proposal, scenario_data, ranking_priorities, include_spicy
     )
+

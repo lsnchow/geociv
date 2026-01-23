@@ -112,7 +112,6 @@ function App() {
     agentSimulation, 
     adoptProposal, 
     forceForwardProposal,
-    isAdopting,
     sessionId,
   } = useCivicStore();
 

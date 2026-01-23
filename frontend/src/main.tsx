@@ -1,7 +1,12 @@
-import { StrictMode, Component, type ReactNode } from 'react'
+import { StrictMode, Component, type ReactNode, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { ClerkProvider, useAuth } from '@clerk/clerk-react'
 import './index.css'
 import App from './App'
+import { LandingPage } from './components/landing'
+
+const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 // ============================================================================
 // Global Error Boundary - prevents "all black" screen on React errors
@@ -135,10 +140,124 @@ window.addEventListener('unhandledrejection', (event) => {
   console.error('[CivicSim] Unhandled promise rejection:', event.reason);
 });
 
+// ============================================================================
+// Protected Route - redirects to landing if not signed in
+// ============================================================================
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { isSignedIn, isLoaded } = useAuth()
+  const location = useLocation()
+
+  if (!isLoaded) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#0a0a0b',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <div style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>Loading...</div>
+      </div>
+    )
+  }
+
+  if (!isSignedIn) {
+    return <Navigate to="/" state={{ from: location }} replace />
+  }
+
+  return <>{children}</>
+}
+
+// ============================================================================
+// Landing Page with auto-redirect for signed-in users
+// ============================================================================
+function LandingRoute() {
+  const { isSignedIn, isLoaded } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      navigate('/app', { replace: true })
+    }
+  }, [isLoaded, isSignedIn, navigate])
+
+  if (!isLoaded) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#0a0a0b',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <div style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>Loading...</div>
+      </div>
+    )
+  }
+
+  // Already signed in - will redirect via useEffect
+  if (isSignedIn) {
+    return null
+  }
+
+  return <LandingPage />
+}
+
+// ============================================================================
+// App Router with Clerk
+// ============================================================================
+function AppRouter() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingRoute />} />
+      <Route
+        path="/app"
+        element={
+          <ProtectedRoute>
+            <App />
+          </ProtectedRoute>
+        }
+      />
+      {/* Catch-all: redirect to landing */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
+
+// ============================================================================
+// App Wrapper with Clerk + Router
+// ============================================================================
+function AppWithAuth() {
+  // If Clerk key is missing or placeholder, just show the app without auth (dev mode)
+  if (!CLERK_KEY || CLERK_KEY.includes('your_clerk')) {
+    console.warn('[CivicSim] Clerk key not configured, running without auth')
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/app" element={<App />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    )
+  }
+
+  return (
+    <BrowserRouter>
+      <ClerkProvider 
+        publishableKey={CLERK_KEY}
+        afterSignOutUrl="/"
+      >
+        <AppRouter />
+      </ClerkProvider>
+    </BrowserRouter>
+  )
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <AppWithAuth />
     </ErrorBoundary>
   </StrictMode>,
 )

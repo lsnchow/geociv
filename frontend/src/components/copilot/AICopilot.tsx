@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useCivicStore } from '../../store';
 import { Button, Badge } from '../ui';
 import * as aiApi from '../../lib/ai-api';
@@ -338,7 +339,22 @@ export function AICopilot() {
                     <span>{msg.dmFrom} → {msg.dmTo}</span>
                   </div>
                 )}
-                <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
+                <div className="text-sm markdown-content">
+                  <ReactMarkdown 
+                    components={{
+                      // Style markdown elements to match our theme
+                      p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
+                      strong: ({children}) => <strong className="font-semibold text-white">{children}</strong>,
+                      em: ({children}) => <em className="italic opacity-80">{children}</em>,
+                      ul: ({children}) => <ul className="list-disc list-inside space-y-1 my-2">{children}</ul>,
+                      ol: ({children}) => <ol className="list-decimal list-inside space-y-1 my-2">{children}</ol>,
+                      li: ({children}) => <li className="ml-2">{children}</li>,
+                      code: ({children}) => <code className="px-1 py-0.5 bg-black/30 rounded text-xs font-mono">{children}</code>,
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
                 
                 {/* Show simulation summary */}
                 {msg.simulationResponse && msg.simulationResponse.reactions.length > 0 && (

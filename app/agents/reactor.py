@@ -173,7 +173,11 @@ class AgentReactor:
             logger.info(f"[REACTOR] session={session_id} agent={agent_key} thread={thread_id} content_len={len(prompt)}")
             
             # Send to Backboard (returns string directly)
-            response_text = await self.client.send_message(thread_id, prompt)
+            response_text = await self.client.send_message(
+                thread_id, 
+                prompt,
+                caller_context=f"reactor.react[{agent_key}]"
+            )
             
             logger.info(f"[REACTOR] session={session_id} agent={agent_key} response_len={len(response_text)}")
             
@@ -199,12 +203,16 @@ class AgentReactor:
         if not session.reactor_assistant_id:
             session.reactor_assistant_id = await self.client.create_assistant(
                 name="CivicSim Agent",
-                system_prompt="You are a Kingston resident reacting to civic proposals. Respond in character with valid JSON only."
+                system_prompt="You are a Kingston resident reacting to civic proposals. Respond in character with valid JSON only.",
+                caller_context="reactor.setup"
             )
             logger.info(f"[REACTOR] Created reactor assistant={session.reactor_assistant_id}")
         
         # Create thread for this agent
-        thread_id = await self.client.create_thread(session.reactor_assistant_id)
+        thread_id = await self.client.create_thread(
+            session.reactor_assistant_id,
+            caller_context="reactor.setup"
+        )
         session.agent_threads[agent_key] = thread_id
         logger.info(f"[REACTOR] Created thread={thread_id} for agent={agent_key} session={session.session_id}")
         

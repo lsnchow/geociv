@@ -301,8 +301,8 @@ Respond with JSON: {{"parameter": "name", "new_value": value, "reason": "why"}}"
                     "content": prompt,
                     "memory": "off",
                     "web_search": "off",
-                    "llm_provider": "google",
-                    "model_name": "gemini-2.5-flash",
+                    "llm_provider": "openai",
+                    "model_name": "gpt-4o",
                     "stream": "false",
                 },
             )
@@ -354,3 +354,4 @@ Respond with JSON: {{"parameter": "name", "new_value": value, "reason": "why"}}"
                 suggestions.append("Include green space requirements")
         
         return suggestions[:3]
+
