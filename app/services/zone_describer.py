@@ -216,8 +216,8 @@ class ZoneDescriber:
                     "content": prompt,
                     "memory": "off",
                     "web_search": "off",
-                    "llm_provider": "google",
-                    "model_name": "gemini-2.5-flash",
+                    "llm_provider": "amazon",
+                    "model_name": "amazon/nova-micro-v1",
                     "stream": "false",
                 },
             )

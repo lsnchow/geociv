@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = True
 
+    # Redis (for simulation job store)
+    redis_url: str = "redis://localhost:6379"
+
     # Simulation defaults
     default_lambda_decay: float = 1.0
     default_seed: int = 42

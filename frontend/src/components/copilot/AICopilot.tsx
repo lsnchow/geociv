@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useCivicStore } from '../../store';
 import { Button, Badge } from '../ui';
+import { SimulationProgress } from './SimulationProgress';
 import * as aiApi from '../../lib/ai-api';
 import * as api from '../../lib/api';
 import type { SimulationResponse } from '../../types/simulation';
@@ -32,6 +33,11 @@ export function AICopilot() {
     sessionId,
     agentSimulation,
     buildWorldStateSummary,
+    // Progressive simulation
+    simulationJob,
+    startProgressiveSimulation,
+    cancelSimulation,
+    updateSimulationJob,
   } = useCivicStore();
   
   // DM mode: both speaker and target are set (and target is not 'all')
@@ -51,9 +57,67 @@ export function AICopilot() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [backboardError, setBackboardError] = useState<string | null>(null);
+  const [useProgressiveSimulation, setUseProgressiveSimulation] = useState(true);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Track if simulation is active (progressive mode)
+  const isSimulating = simulationJob?.status === 'pending' || simulationJob?.status === 'running';
+  
+  // Real-time partial results: update map as agents complete
+  useEffect(() => {
+    if (simulationJob?.partialZones && simulationJob.partialZones.length > 0) {
+      // Update the store with partial zone data for live map coloring
+      if (agentSimulation) {
+        setAgentSimulation({
+          ...agentSimulation,
+          zones: simulationJob.partialZones,
+        });
+      }
+    }
+  }, [simulationJob?.partialZones]);
+  
+  // Handle simulation completion
+  useEffect(() => {
+    if (simulationJob?.status === 'complete' && simulationJob.result) {
+      // Add assistant message with final result
+      const response = simulationJob.result as SimulationResponse;
+      
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: response.assistant_message,
+        simulationResponse: response,
+      };
+      
+      setMessages(prev => [...prev, assistantMessage]);
+      setAgentSimulation(response);
+      
+      // Auto-open the right panel if there are reactions
+      if (response.reactions.length > 0 && !rightPanelOpen) {
+        toggleRightPanel();
+      }
+      
+      // Clear the simulation job
+      updateSimulationJob(null);
+      setIsProcessing(false);
+    } else if (simulationJob?.status === 'error') {
+      const errorMessage: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `❌ Simulation failed: ${simulationJob.error || 'Unknown error'}`,
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      updateSimulationJob(null);
+      setIsProcessing(false);
+    }
+  }, [simulationJob?.status, simulationJob?.result]);
+  
+  const handleCancelSimulation = useCallback(() => {
+    cancelSimulation();
+    setIsProcessing(false);
+  }, [cancelSimulation]);
   
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -143,6 +207,22 @@ export function AICopilot() {
         // Build world state context for all chat messages
         const worldState = buildWorldStateSummary();
         
+        if (useProgressiveSimulation) {
+          // Use progressive simulation with real-time progress
+          await startProgressiveSimulation({
+            message: userMessage.content,
+            scenario_id: scenario.id,
+            thread_id: threadId || undefined,
+            auto_simulate: true,
+            speaker_mode: speakingAsAgent ? 'agent' : 'user',
+            speaker_agent_key: speakingAsAgent?.key,
+            world_state: worldState,
+          });
+          // Don't set isProcessing to false here - the effect will handle it
+          return;
+        }
+        
+        // Fallback: Direct API call (non-progressive)
         const response: SimulationResponse = await aiApi.chat({
           message: userMessage.content,
           scenario_id: scenario.id,
@@ -403,12 +483,26 @@ export function AICopilot() {
             </div>
           ))}
           
-          {isProcessing && (
+          {/* Progressive Simulation Progress */}
+          {isSimulating && simulationJob && (
+            <div className="flex justify-start">
+              <div className="rounded-lg px-4 py-3 bg-civic-elevated text-civic-text w-full max-w-[90%]">
+                <SimulationProgress 
+                  job={simulationJob} 
+                  onCancel={handleCancelSimulation}
+                  compact={false}
+                />
+              </div>
+            </div>
+          )}
+          
+          {/* Fallback: Simple spinner for DM mode or non-progressive */}
+          {isProcessing && !isSimulating && (
             <div className="flex justify-start">
               <div className={`rounded-lg px-4 py-3 ${dmModeActive ? 'bg-purple-500/20 text-purple-300' : 'bg-civic-elevated text-civic-text'}`}>
                 <div className="flex items-center gap-2">
                   <span className="animate-spin">🔄</span>
-                  <span>{dmModeActive ? `Waiting for ${isTargetAgentObject ? targetAgent?.name : 'agent'} to respond...` : 'Simulating community reactions...'}</span>
+                  <span>{dmModeActive ? `Waiting for ${isTargetAgentObject ? targetAgent?.name : 'agent'} to respond...` : 'Processing...'}</span>
                 </div>
               </div>
             </div>
@@ -445,13 +539,26 @@ export function AICopilot() {
         
         {/* Footer */}
         <div className="px-4 py-2 bg-civic-bg/50 border-t border-civic-border flex items-center justify-between">
-          <div className="text-[10px] text-civic-text-secondary">
+          <div className="text-[10px] text-civic-text-secondary flex items-center gap-2">
             <kbd className="px-1 py-0.5 bg-civic-muted rounded text-[9px]">ESC</kbd> to close
+            <span>•</span>
+            <button
+              onClick={() => setUseProgressiveSimulation(prev => !prev)}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
+                useProgressiveSimulation 
+                  ? 'bg-civic-accent/20 text-civic-accent' 
+                  : 'bg-civic-muted text-civic-text-secondary'
+              }`}
+              title={useProgressiveSimulation ? 'Progressive mode: shows real-time progress' : 'Standard mode: waits for completion'}
+            >
+              <span>{useProgressiveSimulation ? '📊' : '⚡'}</span>
+              <span>{useProgressiveSimulation ? 'Progressive' : 'Fast'}</span>
+            </button>
           </div>
           <div className="text-[10px] text-civic-text-secondary flex items-center gap-2">
-            <span>👥 7 Agents</span>
+            <span>👥 21 Agents</span>
             <span>•</span>
-            <span>🗺️ 7 Zones</span>
+            <span>🗺️ 21 Zones</span>
             <span>•</span>
             <span>🏛️ Town Hall</span>
           </div>

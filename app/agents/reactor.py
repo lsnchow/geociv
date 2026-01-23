@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from typing import Optional
+from typing import Optional, Callable, Any
 
 from app.services.backboard_client import BackboardClient, BackboardError
 from app.schemas.multi_agent import (
@@ -97,6 +97,104 @@ class AgentReactor:
         
         logger.info(f"[REACTOR] Completed {len(reactions)} reactions for session={session_id}")
         return reactions
+    
+    async def get_all_reactions_with_progress(
+        self,
+        proposal: InterpretedProposal,
+        session_id: str,
+        vicinity_data: Optional[dict] = None,
+        world_state: Optional[WorldStateSummary] = None,
+        progress_callback: Optional[Callable] = None,
+        aggregator: Optional[Any] = None,
+    ) -> list[AgentReaction]:
+        """
+        Get reactions from all agents with per-agent progress updates.
+        
+        Uses asyncio.as_completed to report progress as each agent finishes.
+        This enables real-time UI updates showing agents populating the map.
+        
+        Args:
+            proposal: The interpreted proposal
+            session_id: Session ID for thread continuity
+            vicinity_data: Optional proximity data from build mode
+            world_state: Optional canonical world state
+            progress_callback: Async callback(reaction_dict, zone_sentiment_dict) per agent
+            aggregator: SentimentAggregator to compute zone sentiment per agent
+        
+        Returns:
+            List of AgentReaction objects
+        """
+        logger.info(f"[REACTOR-PROGRESSIVE] Starting reactions for session={session_id}")
+        
+        # Create tasks with agent info for tracking
+        tasks = {}
+        for agent in AGENTS:
+            task = asyncio.create_task(
+                self._get_agent_reaction(agent, proposal, session_id, vicinity_data, world_state)
+            )
+            tasks[task] = agent
+        
+        reactions = []
+        
+        # Process as each agent completes
+        for completed_task in asyncio.as_completed(tasks.keys()):
+            agent = tasks[completed_task]
+            
+            try:
+                result = await completed_task
+                reactions.append(result)
+                
+                # Report progress if callback provided
+                if progress_callback:
+                    # Compute zone sentiment for this agent
+                    zone_sentiment = None
+                    if aggregator:
+                        # Get single-agent sentiment for their zone
+                        zone_sentiment = self._compute_agent_zone_sentiment(result, agent)
+                    
+                    await progress_callback(
+                        result.model_dump(),
+                        zone_sentiment
+                    )
+                
+                logger.debug(f"[REACTOR-PROGRESSIVE] Agent {agent['key']} completed")
+                
+            except Exception as e:
+                logger.error(f"[REACTOR-PROGRESSIVE] Agent {agent['key']} failed: {e}")
+                fallback = self._fallback_reaction(agent)
+                reactions.append(fallback)
+                
+                if progress_callback:
+                    await progress_callback(fallback.model_dump(), None)
+        
+        logger.info(f"[REACTOR-PROGRESSIVE] Completed {len(reactions)} reactions for session={session_id}")
+        return reactions
+    
+    def _compute_agent_zone_sentiment(self, reaction: AgentReaction, agent: dict) -> Optional[dict]:
+        """Compute zone sentiment from a single agent's reaction."""
+        # Map stance to sentiment value
+        stance_value = {
+            "support": 1.0,
+            "oppose": -1.0,
+            "neutral": 0.0
+        }.get(reaction.stance, 0.0)
+        
+        # Weight by intensity
+        weighted_sentiment = stance_value * reaction.intensity
+        
+        # Find the zone this agent represents
+        zone_id = agent.get("key", agent.get("id", "unknown"))
+        zone = next((z for z in ZONES if z["id"] == zone_id), None)
+        
+        if zone:
+            return {
+                "zone_id": zone["id"],
+                "zone_name": zone["name"],
+                "sentiment": weighted_sentiment,
+                "dominant_stance": reaction.stance,
+                "agent_key": agent.get("key"),
+            }
+        return None
     
     async def _get_agent_reaction(
         self,

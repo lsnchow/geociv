@@ -57,8 +57,8 @@ class LLMCallLogger:
     Usage:
         async with LLMCallLogger(
             request_type="agent",
-            model="gemini-2.0-flash-exp",
-            provider="google",
+            model="amazon/nova-micro-v1",
+            provider="amazon",
             prompt_chars=1234,
             max_tokens=2048
         ) as logger:

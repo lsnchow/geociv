@@ -61,6 +61,21 @@ const SPATIAL_TYPE_EMOJI: Record<string, string> = {
   factory: '🏭',
 };
 
+// Progressive simulation job state
+export interface SimulationJob {
+  jobId: string | null;
+  status: 'idle' | 'pending' | 'running' | 'complete' | 'error';
+  progress: number;  // 0-100
+  phase: string;
+  message: string;
+  completedAgents: number;
+  totalAgents: number;
+  partialReactions: AgentReaction[];
+  partialZones: ZoneSentiment[];
+  error: string | null;
+  result: unknown | null;  // Final simulation result
+}
+
 interface CivicState {
   // Scenario
   scenario: Scenario | null;
@@ -84,6 +99,9 @@ interface CivicState {
   simulationResult: SimulationResult | null;
   isSimulating: boolean;
   autoSimulate: boolean;
+  
+  // Progressive simulation job
+  simulationJob: SimulationJob;
   
   // Multi-agent simulation
   agentSimulation: SimulationResponse | null;
@@ -140,6 +158,17 @@ interface CivicState {
   
   runSimulation: () => Promise<void>;
   setAutoSimulate: (auto: boolean) => void;
+  
+  // Progressive simulation actions
+  startProgressiveSimulation: (message: string, scenarioId: string, options?: {
+    buildProposal?: Record<string, unknown>;
+    worldState?: WorldStateSummary;
+    speakerMode?: string;
+    speakerAgentKey?: string;
+  }) => Promise<void>;
+  pollSimulationStatus: (jobId: string) => Promise<void>;
+  cancelSimulation: () => void;
+  updateSimulationJob: (updates: Partial<SimulationJob>) => void;
   
   addToHistory: (entry: HistoryEntry) => void;
   restoreFromHistory: (id: string) => void;
@@ -211,6 +240,21 @@ export const useCivicStore = create<CivicState>()(
       simulationResult: null,
       isSimulating: false,
       autoSimulate: true,
+      
+      // Progressive simulation job
+      simulationJob: {
+        jobId: null,
+        status: 'idle',
+        progress: 0,
+        phase: '',
+        message: '',
+        completedAgents: 0,
+        totalAgents: 0,
+        partialReactions: [],
+        partialZones: [],
+        error: null,
+        result: null,
+      },
       
       // Multi-agent simulation
       agentSimulation: null,
@@ -463,6 +507,208 @@ export const useCivicStore = create<CivicState>()(
       },
       
       setAutoSimulate: (auto) => set({ autoSimulate: auto }),
+      
+      // Progressive simulation actions
+      startProgressiveSimulation: async (message, scenarioId, options = {}) => {
+        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/v1/ai';
+        
+        // Reset simulation job state
+        set({
+          isSimulating: true,
+          simulationJob: {
+            jobId: null,
+            status: 'pending',
+            progress: 0,
+            phase: 'initializing',
+            message: 'Starting simulation...',
+            completedAgents: 0,
+            totalAgents: 0,
+            partialReactions: [],
+            partialZones: [],
+            error: null,
+          },
+          // Clear previous results
+          agentSimulation: null,
+          zoneSentiments: [],
+          agentReactions: [],
+          townHall: null,
+        });
+        
+        try {
+          const response = await fetch(`${API_BASE}/simulate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message,
+              scenario_id: scenarioId,
+              session_id: get().sessionId,
+              build_proposal: options.buildProposal,
+              world_state: options.worldState,
+              speaker_mode: options.speakerMode || 'user',
+              speaker_agent_key: options.speakerAgentKey,
+            }),
+          });
+          
+          if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error || 'Failed to start simulation');
+          }
+          
+          const data = await response.json();
+          const jobId = data.job_id;
+          
+          set((state) => ({
+            simulationJob: {
+              ...state.simulationJob,
+              jobId,
+              status: 'pending',
+              message: 'Simulation queued...',
+            },
+          }));
+          
+          // Start polling
+          get().pollSimulationStatus(jobId);
+          
+        } catch (error) {
+          console.error('[SIM] Start failed:', error);
+          set({
+            isSimulating: false,
+            simulationJob: {
+              ...get().simulationJob,
+              status: 'error',
+              error: error instanceof Error ? error.message : 'Failed to start simulation',
+            },
+          });
+        }
+      },
+      
+      pollSimulationStatus: async (jobId) => {
+        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/v1/ai';
+        const POLL_INTERVAL = 1500; // 1.5 seconds
+        
+        const poll = async () => {
+          try {
+            const response = await fetch(`${API_BASE}/simulate/${jobId}`);
+            
+            if (!response.ok) {
+              if (response.status === 404) {
+                throw new Error('Simulation job not found');
+              }
+              throw new Error('Failed to poll simulation status');
+            }
+            
+            const data = await response.json();
+            
+            // Update simulation job state
+            set((state) => ({
+              simulationJob: {
+                ...state.simulationJob,
+                status: data.status,
+                progress: data.progress,
+                phase: data.phase,
+                message: data.message,
+                completedAgents: data.completed_agents || 0,
+                totalAgents: data.total_agents || 0,
+                partialReactions: data.partial_reactions || state.simulationJob.partialReactions,
+                partialZones: data.partial_zones || state.simulationJob.partialZones,
+              },
+              // Update partial zone sentiments for real-time map coloring
+              zoneSentiments: data.partial_zones?.length 
+                ? data.partial_zones.map((z: Record<string, unknown>) => ({
+                    zone_id: z.zone_id,
+                    zone_name: z.zone_name,
+                    sentiment: z.sentiment,
+                    dominant_stance: z.dominant_stance,
+                  }))
+                : state.zoneSentiments,
+              // Update partial reactions for real-time agent display
+              agentReactions: data.partial_reactions?.length
+                ? data.partial_reactions
+                : state.agentReactions,
+            }));
+            
+            // Check terminal states
+            if (data.status === 'complete') {
+              // Simulation complete - update with full results
+              const result = data.result;
+              if (result) {
+                set({
+                  isSimulating: false,
+                  agentSimulation: result,
+                  zoneSentiments: result.zones || [],
+                  agentReactions: result.reactions || [],
+                  townHall: result.town_hall || null,
+                  simulationJob: {
+                    ...get().simulationJob,
+                    status: 'complete',
+                    progress: 100,
+                    phase: 'complete',
+                    message: 'Simulation complete',
+                    result: result,
+                  },
+                });
+              }
+              return; // Stop polling
+            }
+            
+            if (data.status === 'error') {
+              set({
+                isSimulating: false,
+                simulationJob: {
+                  ...get().simulationJob,
+                  status: 'error',
+                  error: data.error || 'Simulation failed',
+                },
+              });
+              return; // Stop polling
+            }
+            
+            // Continue polling if still running
+            if (data.status === 'pending' || data.status === 'running') {
+              setTimeout(poll, POLL_INTERVAL);
+            }
+            
+          } catch (error) {
+            console.error('[SIM] Poll error:', error);
+            set({
+              isSimulating: false,
+              simulationJob: {
+                ...get().simulationJob,
+                status: 'error',
+                error: error instanceof Error ? error.message : 'Poll failed',
+              },
+            });
+          }
+        };
+        
+        // Start polling
+        poll();
+      },
+      
+      cancelSimulation: () => {
+        // Cancel current simulation (client-side only for now)
+        set({
+          isSimulating: false,
+          simulationJob: {
+            jobId: null,
+            status: 'idle',
+            progress: 0,
+            phase: '',
+            message: '',
+            completedAgents: 0,
+            totalAgents: 0,
+            partialReactions: [],
+            partialZones: [],
+            error: null,
+          },
+        });
+      },
+      
+      updateSimulationJob: (updates) => {
+        set((state) => ({
+          simulationJob: { ...state.simulationJob, ...updates },
+        }));
+      },
       
       addToHistory: (entry) => {
         const { history } = get();

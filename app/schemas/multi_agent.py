@@ -119,7 +119,7 @@ class SimulationReceipt(BaseModel):
     """Metadata about the simulation run."""
     provider: str = "backboard"
     memory: str = "Auto"
-    model_name: str = "gemini-2.5-flash"
+    model_name: str = "amazon/nova-micro-v1"
     agent_count: int = 0
     duration_ms: int = 0
     run_hash: str = ""

@@ -89,14 +89,14 @@ class BackboardClient:
         self, 
         thread_id: str, 
         content: str,
-        model: str = "gemini-2.0-flash-exp",
-        provider: str = "google",
+        model: str = "amazon/nova-micro-v1",
+        provider: str = "amazon",
         caller_context: str = "unknown",
         request_type: str = "unknown",  # interpreter | agent | reducer
     ) -> str:
         """Send message to thread. Returns assistant response text.
         
-        Default model: gemini-2.0-flash-exp (fastest experimental model from Google)
+        Default model: amazon/nova-micro-v1 (AWS Nova Micro)
         """
         if not content or not content.strip():
             raise BackboardError(400, "Message content cannot be empty")

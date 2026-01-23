@@ -1,5 +1,6 @@
 """Multi-agent civic simulation endpoint."""
 
+import asyncio
 import datetime
 import hashlib
 import time
@@ -7,7 +8,7 @@ import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, Field
 
 from app.services.backboard_client import BackboardClient, BackboardError
@@ -26,6 +27,12 @@ from app.schemas.multi_agent import (
 )
 from app.schemas.proposal import WorldStateSummary
 from app.services.llm_metrics import reset_metrics, log_action_summary, set_wave_index
+from app.services.simulation_job import (
+    get_job_store,
+    SimulationProgress,
+    SimulationPhase,
+    PHASE_MESSAGES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +232,291 @@ async def ai_chat(request: AIChatRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Simulation failed: {str(e)[:200]}",
         )
+
+
+# =============================================================================
+# Progressive Simulation Endpoints - Real-time progress with polling
+# =============================================================================
+
+class SimulationStartResponse(BaseModel):
+    """Response from starting a simulation job."""
+    job_id: str
+    status: str = "pending"
+    message: str = "Simulation queued"
+
+
+class SimulationStatusResponse(BaseModel):
+    """Response from polling simulation status."""
+    job_id: str
+    status: str  # pending | running | complete | error
+    progress: float  # 0-100
+    phase: str
+    message: str
+    completed_agents: int = 0
+    total_agents: int = 0
+    partial_reactions: Optional[list] = None
+    partial_zones: Optional[list] = None
+    result: Optional[dict] = None
+    error: Optional[str] = None
+
+
+@router.post("/simulate", response_model=SimulationStartResponse)
+async def start_simulation(request: AIChatRequest, background_tasks: BackgroundTasks):
+    """
+    Start a progressive simulation job.
+    
+    Returns immediately with job_id. Poll /simulate/{job_id} for progress.
+    
+    This enables:
+    - Real-time progress updates (0-100%)
+    - Phase-by-phase visibility
+    - Partial results as agents complete
+    - Professional "policy lab" UX instead of spinner
+    """
+    # Validate non-empty message
+    if not request.message.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message cannot be empty"
+        )
+    
+    # Session ID for continuity
+    session_id = request.session_id or request.thread_id or f"scenario_{request.scenario_id}"
+    
+    # Create job in store
+    store = await get_job_store()
+    job = await store.create_job(
+        session_id=session_id,
+        request_payload=request.model_dump()
+    )
+    
+    # Start simulation in background
+    background_tasks.add_task(
+        run_progressive_simulation,
+        job.job_id,
+        request,
+        session_id
+    )
+    
+    return SimulationStartResponse(
+        job_id=job.job_id,
+        status="pending",
+        message="Simulation starting..."
+    )
+
+
+@router.get("/simulate/{job_id}", response_model=SimulationStatusResponse)
+async def get_simulation_status(job_id: str):
+    """
+    Poll simulation job status and progress.
+    
+    Returns:
+    - status: pending | running | complete | error
+    - progress: 0-100 (percentage complete)
+    - phase: current execution phase
+    - message: human-readable status message
+    - partial_reactions: agents completed so far (for real-time map updates)
+    - partial_zones: zone sentiments computed so far
+    - result: full simulation result (when status=complete)
+    - error: error message (when status=error)
+    
+    Poll every 1-2 seconds until status is 'complete' or 'error'.
+    """
+    store = await get_job_store()
+    job = await store.get_job(job_id)
+    
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Simulation job {job_id} not found"
+        )
+    
+    return SimulationStatusResponse(**job.get_status_response())
+
+
+async def run_progressive_simulation(
+    job_id: str,
+    request: AIChatRequest,
+    session_id: str
+):
+    """
+    Execute simulation with progress updates.
+    
+    This runs in background and updates job status in Redis.
+    Frontend polls for updates.
+    """
+    store = await get_job_store()
+    job = await store.get_job(job_id)
+    
+    if not job:
+        logger.error(f"[SIM-JOB] Job {job_id} not found")
+        return
+    
+    progress = SimulationProgress(job, store)
+    start_time = time.time()
+    
+    # Reset metrics for this action
+    reset_metrics()
+    
+    try:
+        await progress.start(total_agents=len(AGENTS))
+        
+        client = BackboardClient()
+        
+        # Prepare message with speaker context
+        effective_message = request.message
+        if request.speaker_mode == "agent" and request.speaker_agent_key:
+            from app.agents.definitions import get_agent
+            agent = get_agent(request.speaker_agent_key)
+            if agent:
+                agent_name = agent.get('display_name', agent.get('name', 'Agent'))
+                effective_message = f"[{agent_name} ({agent['role']}) proposes]: {request.message}"
+        
+        # =================================================================
+        # Phase 1: Interpreting (10%)
+        # =================================================================
+        await progress.set_phase(
+            SimulationPhase.INTERPRETING,
+            PHASE_MESSAGES[SimulationPhase.INTERPRETING]
+        )
+        set_wave_index(0)
+        
+        interpreter = ProposalInterpreter(client)
+        interpret_result = await interpreter.interpret(effective_message, session_id)
+        
+        if not interpret_result.ok or not interpret_result.proposal:
+            # Interpretation failed
+            error_msg = "Could not interpret proposal"
+            if interpret_result.clarifying_questions:
+                error_msg = "Clarification needed: " + " ".join(interpret_result.clarifying_questions)
+            await progress.fail(error_msg)
+            return
+        
+        proposal = interpret_result.proposal
+        logger.info(f"[SIM-JOB {job_id[:8]}] Interpreted: {proposal.title}")
+        
+        # =================================================================
+        # Phase 2: Analyzing Impact (10%)
+        # =================================================================
+        await progress.set_phase(
+            SimulationPhase.ANALYZING_IMPACT,
+            f"Analyzing impact of: {proposal.title}"
+        )
+        
+        # Prepare context for agents
+        vicinity_data = request.build_proposal if request.build_proposal else None
+        world_state = request.world_state
+        
+        # =================================================================
+        # Phase 3: Agent Reactions (50%) - with per-agent progress
+        # =================================================================
+        await progress.set_phase(
+            SimulationPhase.AGENT_REACTIONS,
+            PHASE_MESSAGES[SimulationPhase.AGENT_REACTIONS]
+        )
+        set_wave_index(1)
+        
+        reactor = AgentReactor(client)
+        aggregator = SentimentAggregator()
+        
+        # Get reactions with progress updates (modified to report per-agent)
+        reactions = await reactor.get_all_reactions_with_progress(
+            proposal=proposal,
+            session_id=session_id,
+            vicinity_data=vicinity_data,
+            world_state=world_state,
+            progress_callback=progress.agent_completed,
+            aggregator=aggregator,
+        )
+        
+        logger.info(f"[SIM-JOB {job_id[:8]}] Got {len(reactions)} reactions")
+        
+        # =================================================================
+        # Phase 4: Coalition Synthesis (10%)
+        # =================================================================
+        await progress.set_phase(
+            SimulationPhase.COALITION_SYNTHESIS,
+            PHASE_MESSAGES[SimulationPhase.COALITION_SYNTHESIS]
+        )
+        
+        # Final aggregation
+        zones = aggregator.aggregate(reactions)
+        
+        # Identify coalitions
+        support_count = sum(1 for r in reactions if r.stance == "support")
+        oppose_count = sum(1 for r in reactions if r.stance == "oppose")
+        
+        # =================================================================
+        # Phase 5: Town Hall Generation (10%)
+        # =================================================================
+        await progress.set_phase(
+            SimulationPhase.GENERATING_TOWNHALL,
+            PHASE_MESSAGES[SimulationPhase.GENERATING_TOWNHALL]
+        )
+        set_wave_index(2)
+        
+        townhall_gen = TownHallGenerator(client)
+        town_hall = await townhall_gen.generate(proposal, reactions, session_id)
+        
+        logger.info(f"[SIM-JOB {job_id[:8]}] Generated town hall with {len(town_hall.turns)} turns")
+        
+        # =================================================================
+        # Phase 6: Finalizing (5%)
+        # =================================================================
+        await progress.set_phase(
+            SimulationPhase.FINALIZING,
+            PHASE_MESSAGES[SimulationPhase.FINALIZING]
+        )
+        
+        # Build final result
+        duration_ms = int((time.time() - start_time) * 1000)
+        run_hash = hashlib.md5(
+            f"{proposal.title}:{session_id}:{datetime.datetime.utcnow().isoformat()}".encode()
+        ).hexdigest()[:12]
+        
+        neutral_count = len(reactions) - support_count - oppose_count
+        
+        assistant_message = f"**{proposal.title}**\n\n"
+        assistant_message += f"{proposal.summary}\n\n"
+        assistant_message += f"**Community Reaction:** {support_count} support, {oppose_count} oppose, {neutral_count} neutral\n\n"
+        
+        if interpret_result.assumptions:
+            assistant_message += f"*Assumptions: {', '.join(interpret_result.assumptions[:2])}*"
+        
+        # Log metrics
+        log_action_summary(
+            num_agents=len(reactions),
+            max_concurrency=len(AGENTS),
+            total_wall_ms=duration_ms,
+            action_type="progressive_simulation"
+        )
+        
+        # Build final response
+        result = MultiAgentResponse(
+            session_id=session_id,
+            thread_id=session_id,
+            assistant_message=assistant_message,
+            proposal=proposal,
+            reactions=reactions,
+            zones=zones,
+            town_hall=town_hall,
+            receipt=SimulationReceipt(
+                run_hash=run_hash,
+                timestamp=datetime.datetime.utcnow().isoformat(),
+                agent_count=len(reactions),
+                duration_ms=duration_ms,
+            ),
+        )
+        
+        # Mark complete with full result
+        await progress.complete(result.model_dump())
+        
+    except BackboardError as e:
+        logger.error(f"[SIM-JOB {job_id[:8]}] Backboard error: {e}")
+        await progress.fail(f"LLM service error: {str(e.body)[:100]}")
+    except Exception as e:
+        logger.error(f"[SIM-JOB {job_id[:8]}] Unexpected error: {e}")
+        await progress.fail(f"Simulation failed: {str(e)[:100]}")
 
 
 # =============================================================================

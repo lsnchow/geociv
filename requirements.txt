@@ -8,6 +8,7 @@ pydantic-settings>=2.1.0
 httpx>=0.26.0
 numpy>=1.26.0
 python-dotenv>=1.0.0
+redis>=5.0.0
 
 # Testing
 pytest>=8.0.0
