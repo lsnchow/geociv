@@ -312,6 +312,25 @@ class AgentReactor:
             
             logger.info(f"[REACTOR] session={session_id} agent={agent_key} thread={thread_id} model={model} content_len={len(prompt)}")
             
+            # #region agent log
+            import json as _json
+            with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as _f:
+                _f.write(_json.dumps({"location":"reactor:_get_agent_reaction:before_call","message":"About to call agent","data":{"session_id":session_id,"agent_key":agent_key,"model":model},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"E"})+'\n')
+            # #endregion
+            
+            # Create an edge for this API call from system to agent
+            session.update_relationship(
+                from_agent="system",
+                to_agent=agent_key,
+                delta=0.0,  # No relationship change, just tracking the call
+                reason=f"API call for proposal reaction",
+                message=f"Requesting reaction to: {proposal.title[:60]}...",
+            )
+            # #region agent log
+            with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as _f:
+                _f.write(_json.dumps({"location":"reactor:_get_agent_reaction:edge","message":"Created system->agent edge","data":{"session_id":session_id,"agent_key":agent_key},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"B"})+'\n')
+            # #endregion
+            
             # Send to Backboard with agent-specific model
             response_text = await self.client.send_message(
                 thread_id, 
@@ -323,6 +342,11 @@ class AgentReactor:
             )
             
             logger.info(f"[REACTOR] session={session_id} agent={agent_key} response_len={len(response_text)}")
+            
+            # #region agent log
+            with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as _f:
+                _f.write(_json.dumps({"location":"reactor:_get_agent_reaction:after_call","message":"Agent call completed","data":{"session_id":session_id,"agent_key":agent_key,"response_len":len(response_text)},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"E"})+'\n')
+            # #endregion
             
             # Parse response
             reaction = self._parse_reaction(response_text, agent)

@@ -598,10 +598,10 @@ function ModelSelectorPill({ selectedModel, onSelect, availableModels }: ModelSe
   
   const modelDisplayNames: Record<string, { short: string; icon: string; warning?: string }> = {
     'auto': { short: 'Auto', icon: '🤖' },
-    'amazon/nova-micro-v1': { short: 'Nova', icon: '🚀' },
-    'anthropic/claude-3-haiku': { short: 'Haiku', icon: '🧠' },
+    'amazon/nova-micro-v1': { short: 'amazon/nova-micro-v1', icon: '🚀' },
+    'anthropic/claude-3-haiku': { short: 'anthropic/claude-3-haiku', icon: '🧠' },
     'gemini-2.0-flash-lite-001': { 
-      short: 'Gemini', 
+      short: 'gemini-2.0-flash-lite', 
       icon: '⚡',
       warning: 'Optimized for speed; may reduce depth'
     },

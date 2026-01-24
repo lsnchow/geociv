@@ -256,6 +256,9 @@ class SimulationProgress:
         zone_sentiment: Optional[Dict[str, Any]] = None
     ):
         """Record an agent completion and update progress."""
+        # Track completion timestamp for active-call polling
+        agent_reaction = dict(agent_reaction)
+        agent_reaction["completed_at"] = time.time()
         self.job.completed_agents += 1
         self.job.partial_reactions.append(agent_reaction)
         

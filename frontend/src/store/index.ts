@@ -1414,8 +1414,14 @@ export const useCivicStore = create<CivicState>()(
       
       // Graph actions
       loadGraphData: async (sessionId: string) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/833df7df-b87b-44c1-befe-7231bf52dc09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:loadGraphData:start',message:'loadGraphData called',data:{sessionId},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A-C'})}).catch(()=>{});
+        // #endregion
         try {
           const response = await api.getGraphData(sessionId);
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/833df7df-b87b-44c1-befe-7231bf52dc09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:loadGraphData:response',message:'Graph data received',data:{sessionId,nodeCount:response.nodes?.length,edgeCount:response.edges?.length,firstEdge:response.edges?.[0]},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           
           // Transform API response to GraphNode/GraphEdge types
           const nodes: GraphNode[] = response.nodes.map((n: api.GraphNodeData) => ({
@@ -1429,6 +1435,27 @@ export const useCivicStore = create<CivicState>()(
             callState: (n.call_state || 'idle') as 'idle' | 'pending' | 'running' | 'done' | 'error',
             stance: n.stance as 'support' | 'oppose' | 'neutral' | null,
           }));
+
+          // Ensure special nodes exist for visualization
+          const ensureNode = (id: string, type: 'user' | 'system' | 'townhall', name: string, role = '') => {
+            if (!nodes.find(n => n.id === id)) {
+              nodes.push({
+                id,
+                type,
+                name,
+                avatar: '',
+                role,
+                model: null,
+                archetypeStatus: 'default',
+                callState: 'idle',
+                stance: null,
+              });
+            }
+          };
+
+          ensureNode('user', 'user', 'You');
+          ensureNode('system', 'system', 'Backboard', 'LLM Router');
+          ensureNode('townhall', 'townhall', 'Town Hall', 'Reducer');
           
           const edges: GraphEdge[] = response.edges.map((e: api.GraphEdgeData) => ({
             id: e.id,
@@ -1445,18 +1472,26 @@ export const useCivicStore = create<CivicState>()(
           
           set({ graphNodes: nodes, graphEdges: edges });
         } catch (error) {
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/833df7df-b87b-44c1-befe-7231bf52dc09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:loadGraphData:error',message:'Graph data load failed',data:{sessionId,error:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A-C'})}).catch(()=>{});
+          // #endregion
           console.error('[STORE] loadGraphData failed:', error);
         }
       },
       
       pollActiveCalls: async (sessionId: string) => {
         try {
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/833df7df-b87b-44c1-befe-7231bf52dc09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:pollActiveCalls:start',message:'pollActiveCalls called',data:{sessionId},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
           const response = await api.pollActiveCalls(sessionId);
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/833df7df-b87b-44c1-befe-7231bf52dc09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:pollActiveCalls:response',message:'Active calls response',data:{sessionId,activeCount:response.active_calls.length,recentCount:response.recently_completed.length,activeSample:response.active_calls[0]},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
           
-          // Update node call states based on active calls
+          // Update node call states and add synthetic edges to visualize live calls
           set(state => {
             const updatedNodes = state.graphNodes.map(node => {
-              // Check if this node has an active call
               const activeCall = response.active_calls.find(
                 (c: api.ActiveCallData) => c.agent_key === node.id
               );
@@ -1465,14 +1500,67 @@ export const useCivicStore = create<CivicState>()(
               );
               
               if (activeCall) {
-                return { ...node, callState: activeCall.status as 'pending' | 'running' };
+                return { ...node, callState: (activeCall.status as 'pending' | 'running') || 'running' };
               } else if (recentlyCompleted) {
                 return { ...node, callState: 'done' as const };
               }
-              return node;
+              return { ...node, callState: 'idle' as const };
+            });
+
+            // Remove old synthetic edges
+            const preservedEdges = state.graphEdges.filter(e => !e.synthetic);
+            const now = new Date().toISOString();
+            const syntheticEdges: GraphEdge[] = [];
+
+            const buildEdge = (
+              id: string,
+              source: string,
+              target: string,
+              status: 'pending' | 'running' | 'complete' | 'error',
+              timestamp: string | null,
+            ): GraphEdge => ({
+              id,
+              source,
+              target,
+              type: 'call',
+              lastMessage: null,
+              stanceBefore: null,
+              stanceAfter: null,
+              timestamp: timestamp || now,
+              status,
+              score: 0,
+              synthetic: true,
+            });
+
+            response.active_calls.forEach(call => {
+              const status = (call.status as 'pending' | 'running') || 'running';
+              syntheticEdges.push(buildEdge(`active-user-${call.agent_key}`, 'user', call.agent_key, status, call.started_at || null));
+              syntheticEdges.push(buildEdge(`active-${call.agent_key}-system`, call.agent_key, 'system', status, call.started_at || null));
+              if (call.agent_key === 'townhall') {
+                syntheticEdges.push(buildEdge(`active-user-townhall`, 'user', 'townhall', status, call.started_at || null));
+              }
+            });
+
+            response.recently_completed.forEach(call => {
+              syntheticEdges.push(buildEdge(`done-user-${call.agent_key}`, 'user', call.agent_key, 'complete', call.completed_at || now));
+              syntheticEdges.push(buildEdge(`done-${call.agent_key}-system`, call.agent_key, 'system', 'complete', call.completed_at || now));
+              if (call.agent_key === 'townhall') {
+                syntheticEdges.push(buildEdge(`done-user-townhall`, 'user', 'townhall', 'complete', call.completed_at || now));
+              }
             });
             
-            return { graphNodes: updatedNodes };
+            const counts = updatedNodes.reduce((acc, node) => {
+              acc[node.callState] = (acc[node.callState] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>);
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/833df7df-b87b-44c1-befe-7231bf52dc09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'store:pollActiveCalls:update',message:'Updated node call states',data:{sessionId,counts,syntheticCount:syntheticEdges.length},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+            
+            return { 
+              graphNodes: updatedNodes,
+              graphEdges: [...preservedEdges, ...syntheticEdges],
+            };
           });
         } catch (error) {
           console.warn('[STORE] pollActiveCalls failed:', error);
@@ -1539,4 +1627,3 @@ export function createProposalFromCard(
     };
   }
 }
-

@@ -145,30 +145,7 @@ export function GraphNodeComponent({
         </g>
       )}
       
-      {/* Provider chip (below node) */}
-      {node.type === 'agent' && (
-        <g transform={`translate(0, ${radius + 14})`}>
-          <rect
-            x={-18}
-            y={-7}
-            width={36}
-            height={14}
-            rx={7}
-            fill={providerColors.stroke}
-            opacity={0.2}
-          />
-          <text
-            textAnchor="middle"
-            y={3}
-            fill={providerColors.stroke}
-            fontSize={9}
-            fontWeight={600}
-            style={{ userSelect: 'none', pointerEvents: 'none' }}
-          >
-            {modelName}
-          </text>
-        </g>
-      )}
+      {/* Provider chip removed per request */}
       
       {/* Edited badge (if archetype is modified) */}
       {node.archetypeStatus === 'edited' && (

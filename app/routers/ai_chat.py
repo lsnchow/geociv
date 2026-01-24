@@ -290,6 +290,16 @@ async def start_simulation(request: AIChatRequest, background_tasks: BackgroundT
         request_payload=request.model_dump()
     )
     
+    # Track the latest job for this session
+    from app.agents.session_manager import get_session_manager
+    session = get_session_manager().get_or_create_session(session_id)
+    session.last_job_id = job.job_id
+    # #region agent log
+    import json as _json
+    with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as _f:
+        _f.write(_json.dumps({"location":"start_simulation:set_job_id","message":"Set last_job_id on session","data":{"session_id":session_id,"job_id":job.job_id},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"D"})+'\n')
+    # #endregion
+    
     # Start simulation in background
     background_tasks.add_task(
         run_progressive_simulation,
@@ -360,6 +370,22 @@ async def run_progressive_simulation(
     
     try:
         await progress.start(total_agents=len(AGENTS))
+        
+        # Create an edge from user to townhall for this simulation request
+        from app.agents.session_manager import get_session_manager
+        session = get_session_manager().get_or_create_session(session_id)
+        session.update_relationship(
+            from_agent="user",
+            to_agent="townhall",
+            delta=0.0,
+            reason="Initiated simulation",
+            message=f"Proposal: {request.message[:80]}...",
+        )
+        # #region agent log
+        import json as _json
+        with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as _f:
+            _f.write(_json.dumps({"location":"run_progressive_simulation:start","message":"Created user->townhall edge","data":{"session_id":session_id,"message":request.message[:50]},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"E"})+'\n')
+        # #endregion
         
         client = BackboardClient()
         
@@ -823,12 +849,21 @@ JSON only:"""
             )
         
         # Update relationship in session
+        # #region agent log
+        import json as _json
+        with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as _f:
+            _f.write(_json.dumps({"location":"ai_chat:send_dm:update_relationship","message":"Updating relationship for DM","data":{"session_id":session.session_id,"from_agent":request.from_agent_key,"to_agent":request.to_agent_key,"delta":stance_update.relationship_delta},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"A"})+'\n')
+        # #endregion
         new_rel_score = session.update_relationship(
             request.to_agent_key, 
             request.from_agent_key, 
             stance_update.relationship_delta,
             stance_update.reason
         )
+        # #region agent log
+        with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as _f:
+            _f.write(_json.dumps({"location":"ai_chat:send_dm:update_relationship:done","message":"Relationship updated","data":{"session_id":session.session_id,"edge_count":len(session.get_all_edges())},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"A"})+'\n')
+        # #endregion
         
         # If stance changed, write summary to main agent thread
         if stance_update.stance_changed and request.proposal_title:
@@ -948,8 +983,17 @@ async def get_graph_data(session_id: str):
     from app.agents.session_manager import get_session_manager
     from app.agents.definitions import AGENTS, get_agent
     from app.config import DEFAULT_MODEL
+    import json
+    # #region agent log
+    with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"location":"ai_chat:get_graph_data:start","message":"Graph data endpoint called","data":{"session_id":session_id},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"B-C"})+'\n')
+    # #endregion
     
-    session = get_session_manager().get_session(session_id)
+    session = get_session_manager().get_or_create_session(session_id)
+    # #region agent log
+    with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"location":"ai_chat:get_graph_data:session","message":"Session lookup result","data":{"session_id":session_id,"session_found":session is not None,"edge_count":len(session.get_all_edges()) if session else 0},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"B"})+'\n')
+    # #endregion
     
     # Build nodes from agent definitions
     nodes: list[GraphNodeResponse] = []
@@ -1021,6 +1065,12 @@ async def get_graph_data(session_id: str):
             ))
             edge_idx += 1
     
+    # #region agent log
+    system_edges = [e for e in edges if e.source == "system" or e.target == "system"]
+    with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as _f:
+        _f.write(json.dumps({"location":"ai_chat:get_graph_data:edges","message":"Graph edges built","data":{"session_id":session_id,"total_edges":len(edges),"system_edges":len(system_edges),"system_edge_sample":system_edges[0].model_dump() if system_edges else None},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"B"})+'\n')
+    # #endregion
+    
     return GraphDataResponse(
         session_id=session_id,
         nodes=nodes,
@@ -1038,20 +1088,67 @@ async def get_active_calls(session_id: str):
     - recently_completed: Agents that finished within last 5 seconds (for green fade effect)
     """
     import datetime
+    import json as _json
     
     # Get current job status from job store
     store = await get_job_store()
+    from app.agents.session_manager import get_session_manager
+    from app.services.simulation_job import SimulationPhase
+    from app.agents.definitions import AGENTS
     
-    # Find jobs for this session
     active_calls: list[ActiveCallResponse] = []
     recently_completed: list[ActiveCallResponse] = []
     
-    # Get the most recent job for this session
-    # This is a simplified implementation - in production you'd track per-session jobs
+    session = get_session_manager().get_session(session_id)
+    job = await store.get_job(session.last_job_id) if session and session.last_job_id else None
     
-    # For now, return empty if no active simulation
-    # The frontend will update node states based on simulation job status from the store
+    # Compute active and recently completed calls
+    if job:
+        now = time.time()
+        completed_keys = set()
+        for r in job.partial_reactions or []:
+            key = r.get("agent_key")
+            if key:
+                completed_keys.add(key)
+                completed_at = r.get("completed_at")
+                if completed_at and (now - completed_at) <= 5:
+                    recently_completed.append(ActiveCallResponse(
+                        agent_key=key,
+                        status="done",
+                        completed_at=datetime.datetime.utcfromtimestamp(completed_at).isoformat(),
+                    ))
+        
+        # If in agent reactions phase, mark incomplete agents as active
+        if job.status == "running" and job.phase == SimulationPhase.AGENT_REACTIONS.value:
+            for agent in AGENTS:
+                key = agent["key"]
+                if key not in completed_keys:
+                    active_calls.append(ActiveCallResponse(
+                        agent_key=key,
+                        status="running",
+                        started_at=datetime.datetime.utcfromtimestamp(job.started_at or now).isoformat(),
+                    ))
+        
+        # If generating town hall, mark townhall active
+        if job.status == "running" and job.phase == SimulationPhase.GENERATING_TOWNHALL.value:
+            active_calls.append(ActiveCallResponse(
+                agent_key="townhall",
+                status="running",
+                started_at=datetime.datetime.utcfromtimestamp(job.started_at or now).isoformat(),
+            ))
+        
+        # After completion, mark townhall as recently completed for a short window
+        if job.status == "complete" and job.completed_at and (now - job.completed_at) <= 5:
+            recently_completed.append(ActiveCallResponse(
+                agent_key="townhall",
+                status="done",
+                completed_at=datetime.datetime.utcfromtimestamp(job.completed_at).isoformat(),
+            ))
     
+    # #region agent log
+    with open('/Users/lucas/Desktop/hackathons/kinghacks/.cursor/debug.log', 'a') as _f:
+        _f.write(_json.dumps({"location":"ai_chat:get_active_calls","message":"Active calls endpoint response","data":{"session_id":session_id,"job_found":job is not None,"job_status":job.status if job else None,"job_phase":job.phase if job else None,"active_calls":len(active_calls),"recently_completed":len(recently_completed)},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"D"})+'\n')
+    # #endregion
     return ActiveCallsResponse(
         session_id=session_id,
         active_calls=active_calls,

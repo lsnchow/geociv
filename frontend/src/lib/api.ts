@@ -6,7 +6,8 @@ import type {
   HistoryEntry 
 } from '../types';
 
-const API_BASE = '/v1';
+// Allow overriding API base for deployed environments; fall back to relative /v1 for local proxy.
+const API_BASE = (import.meta as any).env?.VITE_API_URL || '/v1';
 
 class ApiError extends Error {
   status: number;
@@ -385,4 +386,3 @@ export async function pollActiveCalls(sessionId: string): Promise<ActiveCallsRes
 }
 
 export { ApiError };
-

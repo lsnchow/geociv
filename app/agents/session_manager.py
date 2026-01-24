@@ -83,6 +83,8 @@ class SessionThreads:
     relationships: dict[str, RelationshipEdge] = field(default_factory=dict)
     # World state (canonical state for agent context)
     world_state: WorldState = field(default_factory=WorldState)
+    # Last simulation job ID (for active call polling)
+    last_job_id: Optional[str] = None
     
     def get_dm_thread_key(self, agent_a: str, agent_b: str) -> str:
         """Get consistent key for DM pair (alphabetically sorted)."""

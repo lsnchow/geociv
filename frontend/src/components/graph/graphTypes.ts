@@ -54,6 +54,7 @@ export interface GraphEdge {
   timestamp: string | null;
   status: EdgeStatus;
   score: number;
+  synthetic?: boolean; // edges we create client-side for visualization
 }
 
 /**

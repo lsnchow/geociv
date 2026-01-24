@@ -1,6 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
-import * as d3 from 'd3-force';
-import { select } from 'd3-selection';
+import { useMemo, useState } from 'react';
 import type { GraphNode, GraphEdge, GraphFilters } from './graphTypes';
 import { CALL_STATE_COLORS, EDGE_COLORS, getEdgeOpacity } from './graphTypes';
 import { GraphNodeComponent } from './GraphNode';
@@ -23,11 +21,8 @@ export function ForceGraph({
   height,
   onNodeClick,
 }: ForceGraphProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const simulationRef = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
   const [hoveredEdge, setHoveredEdge] = useState<GraphEdge | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
-  const [nodePositions, setNodePositions] = useState<Map<string, { x: number; y: number }>>(new Map());
 
   // Filter edges based on current filters
   const filteredEdges = edges.filter(edge => {
@@ -45,111 +40,51 @@ export function ForceGraph({
     ? nodes.filter(n => n.callState !== 'idle' || n.type === 'townhall' || n.type === 'system')
     : nodes;
 
-  // Initialize force simulation
-  useEffect(() => {
-    if (!svgRef.current || nodes.length === 0) return;
+  // Deterministic layout (no physics)
+  const centerX = width / 2;
+  const centerY = height / 2;
 
-    // Create node map for quick lookup
-    const nodeMap = new Map(nodes.map(n => [n.id, n]));
-    
-    // Assign initial positions based on node type
-    const centerX = width / 2;
-    const centerY = height / 2;
-    
-    nodes.forEach((node, i) => {
-      if (node.x === undefined) {
-        if (node.type === 'townhall') {
-          node.x = centerX;
-          node.y = centerY;
-        } else if (node.type === 'user') {
-          node.x = centerX;
-          node.y = 60;
-        } else if (node.type === 'system') {
-          node.x = centerX;
-          node.y = height - 60;
-        } else {
-          // Arrange agents in a circle around center
-          const agentNodes = nodes.filter(n => n.type === 'agent');
-          const agentIndex = agentNodes.findIndex(n => n.id === node.id);
-          const angle = (agentIndex / agentNodes.length) * 2 * Math.PI - Math.PI / 2;
-          const radius = Math.min(width, height) * 0.35;
-          node.x = centerX + Math.cos(angle) * radius;
-          node.y = centerY + Math.sin(angle) * radius;
-        }
+  const positions = useMemo(() => {
+    const pos = new Map<string, { x: number; y: number }>();
+    const agents = filteredNodes.filter(n => n.type === 'agent');
+    const radius = Math.min(width, height) * 0.32;
+
+    filteredNodes.forEach((node, idx) => {
+      if (node.type === 'townhall') {
+        pos.set(node.id, { x: centerX, y: centerY });
+      } else if (node.type === 'user') {
+        pos.set(node.id, { x: centerX, y: 80 });
+      } else if (node.type === 'system') {
+        pos.set(node.id, { x: centerX, y: height - 80 });
+      } else {
+        const angle = (idx / Math.max(1, agents.length)) * 2 * Math.PI - Math.PI / 2;
+        pos.set(node.id, {
+          x: centerX + Math.cos(angle) * radius,
+          y: centerY + Math.sin(angle) * radius,
+        });
       }
     });
+    return pos;
+  }, [filteredNodes, centerX, centerY, width, height]);
 
-    // Create resolved edges with node references
-    const resolvedEdges = filteredEdges.map(edge => ({
-      ...edge,
-      source: nodeMap.get(typeof edge.source === 'string' ? edge.source : edge.source.id) || edge.source,
-      target: nodeMap.get(typeof edge.target === 'string' ? edge.target : edge.target.id) || edge.target,
-    }));
-
-    // Create simulation
-    const simulation = d3.forceSimulation<GraphNode, GraphEdge>(nodes)
-      .force('center', d3.forceCenter(centerX, centerY).strength(0.05))
-      .force('charge', d3.forceManyBody().strength(-200))
-      .force('collide', d3.forceCollide<GraphNode>().radius(45).strength(0.8))
-      .force('link', d3.forceLink<GraphNode, GraphEdge>(resolvedEdges)
-        .id(d => d.id)
-        .distance(120)
-        .strength(0.3))
-      .alphaDecay(0.02)
-      .on('tick', () => {
-        // Update positions on each tick
-        const newPositions = new Map<string, { x: number; y: number }>();
-        nodes.forEach(node => {
-          // Constrain to viewport
-          node.x = Math.max(40, Math.min(width - 40, node.x || centerX));
-          node.y = Math.max(40, Math.min(height - 40, node.y || centerY));
-          newPositions.set(node.id, { x: node.x, y: node.y });
-        });
-        setNodePositions(new Map(newPositions));
-      });
-
-    simulationRef.current = simulation;
-
-    return () => {
-      simulation.stop();
-    };
-  }, [nodes, filteredEdges, width, height]);
-
-  // Handle node drag
-  const handleDragStart = useCallback((node: GraphNode, event: React.MouseEvent) => {
-    if (!simulationRef.current) return;
-    simulationRef.current.alphaTarget(0.3).restart();
-    node.fx = node.x;
-    node.fy = node.y;
-  }, []);
-
-  const handleDrag = useCallback((node: GraphNode, event: React.MouseEvent, delta: { dx: number; dy: number }) => {
-    node.fx = (node.x || 0) + delta.dx;
-    node.fy = (node.y || 0) + delta.dy;
-  }, []);
-
-  const handleDragEnd = useCallback((node: GraphNode) => {
-    if (!simulationRef.current) return;
-    simulationRef.current.alphaTarget(0);
-    // Release fixed position gently
-    node.fx = null;
-    node.fy = null;
-  }, []);
+  const handleDragStart = () => {};
+  const handleDrag = () => {};
+  const handleDragEnd = () => {};
 
   // Edge hover handlers
-  const handleEdgeHover = useCallback((edge: GraphEdge, event: React.MouseEvent) => {
+  const handleEdgeHover = (edge: GraphEdge, event: React.MouseEvent) => {
     setHoveredEdge(edge);
     setTooltipPos({ x: event.clientX, y: event.clientY });
-  }, []);
+  };
 
-  const handleEdgeLeave = useCallback(() => {
+  const handleEdgeLeave = () => {
     setHoveredEdge(null);
     setTooltipPos(null);
-  }, []);
+  };
 
   // Get node position
   const getNodePos = (id: string) => {
-    return nodePositions.get(id) || { x: width / 2, y: height / 2 };
+    return positions.get(id) || { x: width / 2, y: height / 2 };
   };
 
   // Get edge path
@@ -164,7 +99,6 @@ export function ForceGraph({
   return (
     <div className="relative w-full h-full">
       <svg
-        ref={svgRef}
         width={width}
         height={height}
         className="bg-slate-950"

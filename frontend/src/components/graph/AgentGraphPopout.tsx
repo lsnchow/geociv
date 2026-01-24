@@ -65,13 +65,22 @@ export function AgentGraphPopout({
 
   // Load data and start polling when opened
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/833df7df-b87b-44c1-befe-7231bf52dc09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AgentGraphPopout.tsx:useEffect',message:'Graph popout effect triggered',data:{isOpen,sessionId,hasSessionId:!!sessionId},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     if (!isOpen || !sessionId) return;
 
     // Initial load
     const load = async () => {
       setIsLoading(true);
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/833df7df-b87b-44c1-befe-7231bf52dc09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AgentGraphPopout.tsx:load',message:'Loading graph data',data:{sessionId},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       try {
         await loadGraphData(sessionId);
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/833df7df-b87b-44c1-befe-7231bf52dc09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AgentGraphPopout.tsx:loadSuccess',message:'Graph data loaded successfully',data:{sessionId},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
       } finally {
         setIsLoading(false);
       }
@@ -80,6 +89,9 @@ export function AgentGraphPopout({
 
     // Start polling every 1.5s
     pollingRef.current = setInterval(() => {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/833df7df-b87b-44c1-befe-7231bf52dc09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AgentGraphPopout.tsx:poll',message:'Polling active calls',data:{sessionId},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       pollActiveCalls(sessionId);
     }, 1500);
 
