@@ -75,6 +75,7 @@ class LLMCallLogger:
         prompt_chars: int,
         max_tokens: int = 2048,
         caller_context: str = "unknown",
+        cache_hit: bool = False,  # Whether this was served from cache
     ):
         self.request_type = request_type
         self.model = model
@@ -82,6 +83,7 @@ class LLMCallLogger:
         self.prompt_chars = prompt_chars
         self.max_tokens = max_tokens
         self.caller_context = caller_context
+        self.cache_hit = cache_hit
         
         # Timing (monotonic clock)
         self.t_start: Optional[float] = None
@@ -182,6 +184,9 @@ class LLMCallLogger:
             "request_type": self.request_type,
             "caller_context": self.caller_context,
             
+            # Caching
+            "cache_hit": self.cache_hit,
+            
             # Outcome
             "status": self.status,
             "error_code": self.error_code,
@@ -243,6 +248,28 @@ def log_action_summary(
     # Count waves
     num_waves = max((m.get("wave_index", 0) for m in metrics), default=0) + 1
     
+    # Provider breakdown
+    provider_latencies: Dict[str, list[float]] = {}
+    for m in metrics:
+        p = m.get("provider", "unknown")
+        if p not in provider_latencies:
+            provider_latencies[p] = []
+        if m["latency_total_ms"] > 0:
+            provider_latencies[p].append(m["latency_total_ms"])
+    
+    provider_avg = {
+        p: round(sum(lats) / len(lats), 2) if lats else 0
+        for p, lats in provider_latencies.items()
+    }
+    
+    provider_counts = {
+        p: len(lats) for p, lats in provider_latencies.items()
+    }
+    
+    # Cache hit stats
+    cache_hits = sum(1 for m in metrics if m.get("cache_hit", False))
+    cache_hit_rate = round(cache_hits / len(metrics) * 100, 1) if metrics else 0
+    
     summary = {
         "summary_type": "action",
         "action_type": action_type,
@@ -256,6 +283,10 @@ def log_action_summary(
         "total_calls": len(metrics),
         "success_count": sum(1 for m in metrics if m["status"] == "success"),
         "error_count": sum(1 for m in metrics if m["status"] == "error"),
+        "cache_hits": cache_hits,
+        "cache_hit_rate_pct": cache_hit_rate,
+        "provider_avg_latency_ms": provider_avg,
+        "provider_call_counts": provider_counts,
         "timestamp_ms": int(time.time() * 1000),
     }
     
@@ -265,3 +296,36 @@ def log_action_summary(
             f.write(json.dumps(summary) + "\n")
     except Exception as e:
         logging.getLogger("llm_metrics").warning(f"Failed to write summary: {e}")
+
+
+def get_provider_latency_stats() -> Dict[str, Dict[str, Any]]:
+    """
+    Get average latency stats by provider for the current session.
+    
+    Returns dict of provider -> {avg_latency_ms, call_count, p95_latency_ms}
+    Used for UI tooltip showing provider performance.
+    """
+    metrics = get_call_metrics()
+    
+    provider_latencies: Dict[str, list[float]] = {}
+    for m in metrics:
+        p = m.get("provider", "unknown")
+        if p not in provider_latencies:
+            provider_latencies[p] = []
+        if m["latency_total_ms"] > 0:
+            provider_latencies[p].append(m["latency_total_ms"])
+    
+    result = {}
+    for p, lats in provider_latencies.items():
+        if lats:
+            sorted_lats = sorted(lats)
+            p95_idx = int(len(sorted_lats) * 0.95)
+            result[p] = {
+                "avg_latency_ms": round(sum(lats) / len(lats), 2),
+                "p95_latency_ms": round(sorted_lats[p95_idx], 2),
+                "call_count": len(lats),
+                "min_latency_ms": round(min(lats), 2),
+                "max_latency_ms": round(max(lats), 2),
+            }
+    
+    return result

@@ -131,6 +131,21 @@ interface CivicState {
   history: HistoryEntry[];
   selectedHistoryId: string | null;
   
+  // Agent Overrides (per-agent model/archetype customization)
+  agentOverrides: Record<string, { model?: string; archetype_override?: string; is_edited: boolean }>;
+  availableModels: string[];
+  defaultModel: string;
+  loadingOverrides: boolean;
+  
+  // Cache State
+  cacheStatus: 'idle' | 'checking' | 'hit' | 'miss' | 'running';
+  lastCacheKey: string | null;
+  lastCacheResult: Record<string, unknown> | null;
+  providerMix: string | null;
+  
+  // Chat model override (per-message)
+  chatModelOverride: string | null;  // null = use per-agent settings ("Auto")
+  
   // UI State
   leftPanelOpen: boolean;
   rightPanelOpen: boolean;
@@ -204,6 +219,19 @@ interface CivicState {
   
   // Simulate All action
   simulateAll: (framingQuestion?: string) => Promise<void>;
+  
+  // Agent Override actions
+  loadAgentOverrides: (scenarioId: string) => Promise<void>;
+  updateAgentOverride: (agentKey: string, update: { model?: string | null; archetype_override?: string | null }) => Promise<void>;
+  resetAgentOverride: (agentKey: string) => Promise<void>;
+  resetAllAgentOverrides: () => Promise<void>;
+  
+  // Cache actions
+  checkPromotionCache: (proposalHash: string) => Promise<boolean>;
+  reloadFromCache: () => Promise<void>;
+  
+  // Chat model override
+  setChatModelOverride: (model: string | null) => void;
 }
 
 // Default proposal values
@@ -278,6 +306,21 @@ export const useCivicStore = create<CivicState>()(
       
       history: [],
       selectedHistoryId: null,
+      
+      // Agent Overrides
+      agentOverrides: {},
+      availableModels: ['amazon/nova-micro-v1', 'anthropic/claude-3-haiku', 'gemini-2.0-flash-lite-001'],
+      defaultModel: 'amazon/nova-micro-v1',
+      loadingOverrides: false,
+      
+      // Cache State
+      cacheStatus: 'idle',
+      lastCacheKey: null,
+      lastCacheResult: null,
+      providerMix: null,
+      
+      // Chat model override
+      chatModelOverride: null,
       
       leftPanelOpen: true,
       rightPanelOpen: true,
@@ -1161,6 +1204,188 @@ export const useCivicStore = create<CivicState>()(
         } finally {
           set({ isSimulating: false });
         }
+      },
+      
+      // Agent Override actions
+      loadAgentOverrides: async (scenarioId: string) => {
+        set({ loadingOverrides: true });
+        try {
+          const response = await api.getAgentOverrides(scenarioId);
+          const overrides: Record<string, { model?: string; archetype_override?: string; is_edited: boolean }> = {};
+          
+          for (const [key, data] of Object.entries(response.overrides)) {
+            overrides[key] = {
+              model: data.model || undefined,
+              archetype_override: data.archetype_override || undefined,
+              is_edited: data.is_edited,
+            };
+          }
+          
+          set({
+            agentOverrides: overrides,
+            availableModels: response.available_models,
+            loadingOverrides: false,
+          });
+        } catch (error) {
+          console.error('[STORE] loadAgentOverrides failed:', error);
+          set({ loadingOverrides: false });
+        }
+      },
+      
+      updateAgentOverride: async (agentKey: string, update: { model?: string | null; archetype_override?: string | null }) => {
+        const { scenario } = get();
+        if (!scenario) {
+          console.warn('[STORE] updateAgentOverride: No scenario loaded');
+          return;
+        }
+        
+        try {
+          const response = await api.updateAgentOverride(scenario.id, agentKey, update);
+          
+          set(state => ({
+            agentOverrides: {
+              ...state.agentOverrides,
+              [agentKey]: {
+                model: response.model || undefined,
+                archetype_override: response.archetype_override || undefined,
+                is_edited: response.is_edited,
+              },
+            },
+            // Invalidate cache when override changes
+            cacheStatus: 'idle',
+            lastCacheKey: null,
+            lastCacheResult: null,
+          }));
+        } catch (error) {
+          console.error('[STORE] updateAgentOverride failed:', error);
+        }
+      },
+      
+      resetAgentOverride: async (agentKey: string) => {
+        const { scenario } = get();
+        if (!scenario) {
+          console.warn('[STORE] resetAgentOverride: No scenario loaded');
+          return;
+        }
+        
+        try {
+          const response = await api.resetAgentOverride(scenario.id, agentKey);
+          
+          set(state => ({
+            agentOverrides: {
+              ...state.agentOverrides,
+              [agentKey]: {
+                model: undefined,
+                archetype_override: undefined,
+                is_edited: false,
+              },
+            },
+            // Invalidate cache
+            cacheStatus: 'idle',
+            lastCacheKey: null,
+            lastCacheResult: null,
+          }));
+        } catch (error) {
+          console.error('[STORE] resetAgentOverride failed:', error);
+        }
+      },
+      
+      resetAllAgentOverrides: async () => {
+        const { scenario } = get();
+        if (!scenario) {
+          console.warn('[STORE] resetAllAgentOverrides: No scenario loaded');
+          return;
+        }
+        
+        try {
+          await api.resetAllAgentOverrides(scenario.id);
+          
+          // Clear all overrides
+          set({
+            agentOverrides: {},
+            cacheStatus: 'idle',
+            lastCacheKey: null,
+            lastCacheResult: null,
+          });
+        } catch (error) {
+          console.error('[STORE] resetAllAgentOverrides failed:', error);
+        }
+      },
+      
+      // Cache actions
+      checkPromotionCache: async (proposalHash: string) => {
+        const { scenario, agentOverrides } = get();
+        if (!scenario) return false;
+        
+        set({ cacheStatus: 'checking' });
+        
+        try {
+          // Build agent models map from overrides
+          const agentModels: Record<string, string> = {};
+          for (const [key, override] of Object.entries(agentOverrides)) {
+            if (override.model) {
+              agentModels[key] = override.model;
+            }
+          }
+          
+          // Compute cache key
+          const keyResponse = await api.computeCacheKey({
+            scenario_id: scenario.id,
+            proposal_hash: proposalHash,
+            agent_models: agentModels,
+            sim_mode: 'progressive',
+          });
+          
+          // Check cache
+          const cacheResponse = await api.checkCache(keyResponse.cache_key);
+          
+          if (cacheResponse.hit) {
+            set({
+              cacheStatus: 'hit',
+              lastCacheKey: cacheResponse.cache_key,
+              lastCacheResult: cacheResponse.result || null,
+              providerMix: cacheResponse.provider_mix || null,
+            });
+            return true;
+          } else {
+            set({
+              cacheStatus: 'miss',
+              lastCacheKey: keyResponse.cache_key,
+              lastCacheResult: null,
+              providerMix: null,
+            });
+            return false;
+          }
+        } catch (error) {
+          console.error('[STORE] checkPromotionCache failed:', error);
+          set({ cacheStatus: 'idle' });
+          return false;
+        }
+      },
+      
+      reloadFromCache: async () => {
+        const { lastCacheKey } = get();
+        if (!lastCacheKey) {
+          console.warn('[STORE] reloadFromCache: No cache key');
+          return;
+        }
+        
+        try {
+          const response = await api.checkCache(lastCacheKey);
+          if (response.hit && response.result) {
+            set({
+              lastCacheResult: response.result,
+              providerMix: response.provider_mix || null,
+            });
+          }
+        } catch (error) {
+          console.error('[STORE] reloadFromCache failed:', error);
+        }
+      },
+      
+      // Chat model override
+      setChatModelOverride: (model: string | null) => {
+        set({ chatModelOverride: model });
       },
     }),
     {

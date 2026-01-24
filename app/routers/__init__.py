@@ -1,6 +1,6 @@
 """API routers for CivicSim."""
 
-from app.routers import scenarios, proposals, simulate, observability, ai_chat
+from app.routers import scenarios, proposals, simulate, observability, ai_chat, cache
 
 __all__ = [
     "scenarios",
@@ -8,5 +8,6 @@ __all__ = [
     "simulate",
     "observability",
     "ai_chat",
+    "cache",
 ]
 

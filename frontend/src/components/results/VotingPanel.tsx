@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useCivicStore } from '../../store';
 import type { AgentReaction, InterpretedProposal } from '../../types/simulation';
 
 interface VotingPanelProps {
@@ -16,6 +17,12 @@ export function VotingPanel({
   onForceForward,
   isAdopting = false 
 }: VotingPanelProps) {
+  const { 
+    cacheStatus, 
+    providerMix, 
+    reloadFromCache,
+    simulationJob,
+  } = useCivicStore();
   // Calculate vote tally using abstention-neutral voting
   const voteTally = useMemo(() => {
     const support = reactions.filter(r => r.stance === 'support').length;
@@ -35,27 +42,61 @@ export function VotingPanel({
   const isPassing = voteTally.agreementPct >= 50;
   const isInsufficientSignal = voteTally.totalVotes === 0;
 
+  // Cache badge text
+  const cacheBadge = useMemo(() => {
+    if (simulationJob.status === 'running' || simulationJob.status === 'pending') {
+      return { text: 'Running...', class: 'bg-blue-500/20 text-blue-400', icon: '⏳' };
+    }
+    if (cacheStatus === 'hit') {
+      return { text: `Cached${providerMix ? ` · ${providerMix}` : ''}`, class: 'bg-purple-500/20 text-purple-400', icon: '📦' };
+    }
+    if (cacheStatus === 'miss' && simulationJob.status === 'complete') {
+      return { text: 'New run', class: 'bg-green-500/20 text-green-400', icon: '✨' };
+    }
+    return null;
+  }, [cacheStatus, providerMix, simulationJob.status]);
+
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-medium text-civic-text-secondary uppercase tracking-wide">
-          Consensus Gate
-        </h4>
-        {!isInsufficientSignal && (
-          <span className={`text-xs font-bold px-2 py-1 rounded ${
-            isPassing 
-              ? 'bg-green-500/20 text-green-400' 
-              : 'bg-red-500/20 text-red-400'
-          }`}>
-            {isPassing ? '✓ PASS' : '✗ FAIL'}
-          </span>
-        )}
-        {isInsufficientSignal && (
-          <span className="text-xs font-bold px-2 py-1 rounded bg-yellow-500/20 text-yellow-400">
-            ⚠ INSUFFICIENT SIGNAL
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          <h4 className="text-xs font-medium text-civic-text-secondary uppercase tracking-wide">
+            Consensus Gate
+          </h4>
+          {/* Cache Badge */}
+          {cacheBadge && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${cacheBadge.class}`}>
+              {cacheBadge.icon} {cacheBadge.text}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Reload button */}
+          {cacheStatus === 'hit' && (
+            <button
+              onClick={reloadFromCache}
+              className="text-[10px] text-civic-text-secondary hover:text-civic-accent transition-colors"
+              title="Reload (no rerun)"
+            >
+              ↻ Reload
+            </button>
+          )}
+          {!isInsufficientSignal && (
+            <span className={`text-xs font-bold px-2 py-1 rounded ${
+              isPassing 
+                ? 'bg-green-500/20 text-green-400' 
+                : 'bg-red-500/20 text-red-400'
+            }`}>
+              {isPassing ? '✓ PASS' : '✗ FAIL'}
+            </span>
+          )}
+          {isInsufficientSignal && (
+            <span className="text-xs font-bold px-2 py-1 rounded bg-yellow-500/20 text-yellow-400">
+              ⚠ INSUFFICIENT SIGNAL
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Vote Tally */}

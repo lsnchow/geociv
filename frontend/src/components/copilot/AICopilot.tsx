@@ -38,6 +38,10 @@ export function AICopilot() {
     startProgressiveSimulation,
     cancelSimulation,
     updateSimulationJob,
+    // Model override
+    chatModelOverride,
+    setChatModelOverride,
+    availableModels,
   } = useCivicStore();
   
   // DM mode: both speaker and target are set (and target is not 'all')
@@ -561,15 +565,128 @@ export function AICopilot() {
               <span>{useProgressiveSimulation ? 'Progressive' : 'Fast'}</span>
             </button>
           </div>
+          
+          {/* Model Selector */}
+          <div className="flex items-center gap-1">
+            <ModelSelectorPill
+              selectedModel={chatModelOverride}
+              onSelect={setChatModelOverride}
+              availableModels={availableModels}
+            />
+          </div>
+          
           <div className="text-[10px] text-civic-text-secondary flex items-center gap-2">
             <span>👥 21 Agents</span>
             <span>•</span>
             <span>🗺️ 21 Zones</span>
-            <span>•</span>
-            <span>🏛️ Town Hall</span>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Model selector pill component
+interface ModelSelectorPillProps {
+  selectedModel: string | null;
+  onSelect: (model: string | null) => void;
+  availableModels: string[];
+}
+
+function ModelSelectorPill({ selectedModel, onSelect, availableModels }: ModelSelectorPillProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const modelDisplayNames: Record<string, { short: string; icon: string; warning?: string }> = {
+    'auto': { short: 'Auto', icon: '🤖' },
+    'amazon/nova-micro-v1': { short: 'Nova', icon: '🚀' },
+    'anthropic/claude-3-haiku': { short: 'Haiku', icon: '🧠' },
+    'gemini-2.0-flash-lite-001': { 
+      short: 'Gemini', 
+      icon: '⚡',
+      warning: 'Optimized for speed; may reduce depth'
+    },
+  };
+  
+  const currentDisplay = selectedModel 
+    ? modelDisplayNames[selectedModel] || { short: selectedModel.split('/').pop(), icon: '🤖' }
+    : modelDisplayNames['auto'];
+  
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors ${
+          selectedModel 
+            ? 'bg-civic-accent/20 text-civic-accent border border-civic-accent/30' 
+            : 'bg-civic-muted text-civic-text-secondary hover:bg-civic-elevated'
+        }`}
+        title={selectedModel ? `Using ${currentDisplay.short} for this message` : 'Using per-agent models (Auto)'}
+      >
+        <span>{currentDisplay.icon}</span>
+        <span>{currentDisplay.short}</span>
+        <span className="text-[8px] opacity-60">▼</span>
+      </button>
+      
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={() => setIsOpen(false)} 
+          />
+          
+          {/* Dropdown */}
+          <div className="absolute bottom-full left-0 mb-1 w-48 bg-civic-surface border border-civic-border rounded-lg shadow-lg z-50 overflow-hidden">
+            <div className="p-1">
+              {/* Auto option */}
+              <button
+                onClick={() => { onSelect(null); setIsOpen(false); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded text-left text-xs transition-colors ${
+                  !selectedModel 
+                    ? 'bg-civic-accent/10 text-civic-accent' 
+                    : 'text-civic-text hover:bg-civic-elevated'
+                }`}
+              >
+                <span>🤖</span>
+                <div className="flex-1">
+                  <div className="font-medium">Auto</div>
+                  <div className="text-[10px] text-civic-text-secondary">Use per-agent settings</div>
+                </div>
+                {!selectedModel && <span className="text-civic-accent">✓</span>}
+              </button>
+              
+              <div className="h-px bg-civic-border my-1" />
+              
+              {/* Model options */}
+              {availableModels.map(model => {
+                const info = modelDisplayNames[model] || { short: model, icon: '🤖' };
+                const isSelected = selectedModel === model;
+                
+                return (
+                  <button
+                    key={model}
+                    onClick={() => { onSelect(model); setIsOpen(false); }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded text-left text-xs transition-colors ${
+                      isSelected 
+                        ? 'bg-civic-accent/10 text-civic-accent' 
+                        : 'text-civic-text hover:bg-civic-elevated'
+                    }`}
+                  >
+                    <span>{info.icon}</span>
+                    <div className="flex-1">
+                      <div className="font-medium">{info.short}</div>
+                      {info.warning && (
+                        <div className="text-[10px] text-amber-400">{info.warning}</div>
+                      )}
+                    </div>
+                    {isSelected && <span className="text-civic-accent">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

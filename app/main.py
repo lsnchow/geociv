@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import init_db
 from app.logging_config import setup_logging, get_logger
-from app.routers import scenarios, proposals, simulate, observability, ai_chat
+from app.routers import scenarios, proposals, simulate, observability, ai_chat, cache
 # OLD routers disabled: chat, ai (replaced by ai_chat)
 
 # Setup logging
@@ -75,6 +75,7 @@ app.include_router(scenarios.router, prefix="/v1", tags=["Scenarios"])
 app.include_router(proposals.router, prefix="/v1", tags=["Proposals"])
 app.include_router(simulate.router, prefix="/v1", tags=["Simulation"])
 app.include_router(ai_chat.router, prefix="/v1", tags=["AI Chat"])
+app.include_router(cache.router, prefix="/v1", tags=["Cache"])
 # OLD routers disabled until core works:
 # app.include_router(chat.router, prefix="/v1", tags=["Chat"])
 # app.include_router(ai.router, prefix="/v1", tags=["AI Agent"])

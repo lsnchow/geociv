@@ -185,5 +185,148 @@ export async function getRelationships(sessionId: string): Promise<Relationships
   return request<RelationshipsResponse>(`/ai/relationships/${sessionId}`);
 }
 
+// =============================================================================
+// Agent Overrides
+// =============================================================================
+
+export interface AgentOverrideData {
+  agent_key: string;
+  model: string | null;
+  archetype_override: string | null;
+  default_model: string;
+  is_edited: boolean;
+}
+
+export interface AgentOverridesResponse {
+  scenario_id: string;
+  overrides: Record<string, AgentOverrideData>;
+  available_models: string[];
+}
+
+export async function getAgentOverrides(scenarioId: string): Promise<AgentOverridesResponse> {
+  return request<AgentOverridesResponse>(`/scenario/${scenarioId}/agent-overrides`);
+}
+
+export interface AgentOverrideUpdate {
+  model?: string | null;
+  archetype_override?: string | null;
+}
+
+export async function updateAgentOverride(
+  scenarioId: string, 
+  agentKey: string, 
+  update: AgentOverrideUpdate
+): Promise<AgentOverrideData> {
+  return request<AgentOverrideData>(`/scenario/${scenarioId}/agents/${agentKey}`, {
+    method: 'PUT',
+    body: JSON.stringify(update),
+  });
+}
+
+export async function resetAgentOverride(
+  scenarioId: string, 
+  agentKey: string
+): Promise<AgentOverrideData> {
+  return request<AgentOverrideData>(`/scenario/${scenarioId}/agents/${agentKey}/reset`, {
+    method: 'POST',
+  });
+}
+
+export async function resetAllAgentOverrides(scenarioId: string): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/scenario/${scenarioId}/agents/reset-all`, {
+    method: 'POST',
+  });
+}
+
+// =============================================================================
+// Cache / Promotion
+// =============================================================================
+
+export interface CacheCheckResponse {
+  hit: boolean;
+  cache_key: string;
+  result?: Record<string, unknown>;
+  provider_mix?: string;
+  created_at?: string;
+}
+
+export async function checkCache(cacheKey: string): Promise<CacheCheckResponse> {
+  return request<CacheCheckResponse>(`/cache/${cacheKey}`);
+}
+
+export interface PromoteRequest {
+  scenario_id: string;
+  proposal: Record<string, unknown>;
+  session_id: string;
+  agent_overrides?: Record<string, { model?: string; archetype?: string }>;
+  sim_mode?: 'progressive' | 'fast';
+  world_state?: Record<string, unknown>;
+}
+
+export interface PromoteResponse {
+  cached: boolean;
+  cache_key: string;
+  result: Record<string, unknown>;
+  provider_mix: string;
+  message: string;
+}
+
+export async function promoteWithCache(request: PromoteRequest): Promise<PromoteResponse> {
+  return request<PromoteResponse>('/cache/promote', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+export async function invalidateCache(scenarioId: string, agentKey?: string): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>('/cache/invalidate', {
+    method: 'POST',
+    body: JSON.stringify({
+      scenario_id: scenarioId,
+      agent_key: agentKey,
+    }),
+  });
+}
+
+export interface CacheKeyInputs {
+  scenario_id: string;
+  proposal_hash: string;
+  agent_models?: Record<string, string>;
+  archetype_overrides?: Record<string, string>;
+  sim_mode?: string;
+}
+
+export async function computeCacheKey(inputs: CacheKeyInputs): Promise<{ cache_key: string }> {
+  return request<{ cache_key: string }>('/cache/compute-key', {
+    method: 'POST',
+    body: JSON.stringify(inputs),
+  });
+}
+
+// =============================================================================
+// LLM Stats
+// =============================================================================
+
+export interface ProviderStats {
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  call_count: number;
+  min_latency_ms: number;
+  max_latency_ms: number;
+}
+
+export interface LLMStatsResponse {
+  provider_stats: Record<string, ProviderStats>;
+  total_calls: number;
+  cache_hits: number;
+  cache_hit_rate_pct: number;
+  allowed_models: string[];
+  default_model: string;
+}
+
+export async function getLLMStats(): Promise<LLMStatsResponse> {
+  return request<LLMStatsResponse>('/llm-stats');
+}
+
 export { ApiError };
 

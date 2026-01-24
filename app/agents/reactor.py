@@ -14,8 +14,13 @@ from app.schemas.multi_agent import (
 from app.schemas.proposal import WorldStateSummary
 from app.agents.definitions import AGENTS, ZONES
 from app.agents.session_manager import get_session_manager
+from app.config import DEFAULT_MODEL, get_provider
 
 logger = logging.getLogger(__name__)
+
+
+# Type for agent overrides passed from the API
+AgentOverridesMap = dict[str, dict[str, Optional[str]]]  # agent_key -> {model?, archetype_override?}
 
 # Reaction prompt template
 REACTION_PROMPT = """You are {agent_name}, the {agent_role} representing {region_name}.
@@ -64,6 +69,7 @@ class AgentReactor:
         session_id: str,
         vicinity_data: Optional[dict] = None,
         world_state: Optional[WorldStateSummary] = None,
+        agent_overrides: Optional[AgentOverridesMap] = None,
     ) -> list[AgentReaction]:
         """
         Get reactions from all agents in parallel.
@@ -71,15 +77,21 @@ class AgentReactor:
         Uses session_id to maintain thread continuity per agent.
         vicinity_data (optional): Contains affected_regions with proximity weights.
         world_state (optional): Canonical world state with placed items, policies, relationships.
+        agent_overrides (optional): Per-agent model and archetype overrides.
         Returns list of AgentReaction objects.
         """
         logger.info(f"[REACTOR] Starting reactions for session={session_id}")
         if world_state:
             logger.info(f"[REACTOR] World state: {world_state.version} version, {len(world_state.placed_items)} items, {len(world_state.adopted_policies)} policies")
+        if agent_overrides:
+            override_count = sum(1 for o in agent_overrides.values() if o.get("model") or o.get("archetype_override"))
+            logger.info(f"[REACTOR] Agent overrides: {override_count} agents with custom settings")
+        
+        overrides = agent_overrides or {}
         
         # Run all agent reactions concurrently
         tasks = [
-            self._get_agent_reaction(agent, proposal, session_id, vicinity_data, world_state)
+            self._get_agent_reaction(agent, proposal, session_id, vicinity_data, world_state, overrides.get(agent["key"]))
             for agent in AGENTS
         ]
         
@@ -106,6 +118,7 @@ class AgentReactor:
         world_state: Optional[WorldStateSummary] = None,
         progress_callback: Optional[Callable] = None,
         aggregator: Optional[Any] = None,
+        agent_overrides: Optional[AgentOverridesMap] = None,
     ) -> list[AgentReaction]:
         """
         Get reactions from all agents with per-agent progress updates.
@@ -120,17 +133,20 @@ class AgentReactor:
             world_state: Optional canonical world state
             progress_callback: Async callback(reaction_dict, zone_sentiment_dict) per agent
             aggregator: SentimentAggregator to compute zone sentiment per agent
+            agent_overrides: Optional per-agent model and archetype overrides
         
         Returns:
             List of AgentReaction objects
         """
         logger.info(f"[REACTOR-PROGRESSIVE] Starting reactions for session={session_id}")
         
+        overrides = agent_overrides or {}
+        
         # Create tasks with agent info for tracking
         # Store both task and agent info together so we can identify which agent completed
         task_agent_map = []
         for agent in AGENTS:
-            task = self._get_agent_reaction(agent, proposal, session_id, vicinity_data, world_state)
+            task = self._get_agent_reaction(agent, proposal, session_id, vicinity_data, world_state, overrides.get(agent["key"]))
             task_agent_map.append((task, agent))
         
         reactions = []
@@ -205,8 +221,18 @@ class AgentReactor:
         session_id: str,
         vicinity_data: Optional[dict] = None,
         world_state: Optional[WorldStateSummary] = None,
+        agent_override: Optional[dict] = None,
     ) -> AgentReaction:
-        """Get reaction from a single agent."""
+        """Get reaction from a single agent.
+        
+        Args:
+            agent: Agent definition dict
+            proposal: The interpreted proposal
+            session_id: Session ID for thread continuity
+            vicinity_data: Optional proximity data from build mode
+            world_state: Optional canonical world state
+            agent_override: Optional dict with 'model' and/or 'archetype_override' keys
+        """
         agent_key = agent["key"]
         session = self.session_mgr.get_or_create_session(session_id)
         
@@ -250,13 +276,19 @@ class AgentReactor:
         # Build list of available zone IDs
         available_zone_ids = ", ".join(z["id"] for z in ZONES)
         
+        # Use archetype override if provided, otherwise use default persona
+        persona = agent["persona"]
+        if agent_override and agent_override.get("archetype_override"):
+            persona = agent_override["archetype_override"]
+            logger.debug(f"[REACTOR] Using custom archetype for agent={agent_key}")
+        
         prompt = REACTION_PROMPT.format(
             agent_name=agent.get("display_name", agent.get("name", "Agent")),
             agent_role=agent["role"],
             region_name=region_name,
             bio=agent.get("bio", ""),
             speaking_style=agent.get("speaking_style", "Direct and clear"),
-            persona=agent["persona"],
+            persona=persona,
             world_state_context=world_state_context,
             proposal_title=proposal.title,
             proposal_type=proposal.type,
@@ -266,16 +298,26 @@ class AgentReactor:
             available_zone_ids=available_zone_ids,
         )
         
+        # Determine model to use (override or default)
+        model = DEFAULT_MODEL
+        if agent_override and agent_override.get("model"):
+            model = agent_override["model"]
+            logger.debug(f"[REACTOR] Using custom model for agent={agent_key}: {model}")
+        
+        provider = get_provider(model)
+        
         try:
             # Get or create thread for this agent IN THIS SESSION
             thread_id = await self._get_agent_thread(agent_key, session)
             
-            logger.info(f"[REACTOR] session={session_id} agent={agent_key} thread={thread_id} content_len={len(prompt)}")
+            logger.info(f"[REACTOR] session={session_id} agent={agent_key} thread={thread_id} model={model} content_len={len(prompt)}")
             
-            # Send to Backboard (returns string directly)
+            # Send to Backboard with agent-specific model
             response_text = await self.client.send_message(
                 thread_id, 
                 prompt,
+                model=model,
+                provider=provider,
                 caller_context=f"reactor.react[{agent_key}]",
                 request_type="agent"
             )

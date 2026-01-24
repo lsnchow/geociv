@@ -4,12 +4,14 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from pydantic import BaseModel, Field
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.scenario import Scenario, Cluster, ClusterArchetypeDistribution
+from app.models.simulation import AgentOverride, PromotionCache
 from app.schemas.scenario import (
     ScenarioCreate,
     ScenarioResponse,
@@ -17,6 +19,8 @@ from app.schemas.scenario import (
     ClusterResponse,
     ArchetypeDistributionConfig,
 )
+from app.config import ALLOWED_MODELS, DEFAULT_MODEL, validate_model
+from app.agents.definitions import get_agent, AGENTS
 
 router = APIRouter()
 
@@ -267,4 +271,260 @@ def _scenario_to_response(scenario: Scenario) -> ScenarioResponse:
         created_at=scenario.created_at,
         updated_at=scenario.updated_at,
     )
+
+
+# =============================================================================
+# Agent Override Schemas
+# =============================================================================
+
+class AgentOverrideUpdate(BaseModel):
+    """Request to update an agent's model or archetype."""
+    model: Optional[str] = Field(None, description="Model override (null = use default)")
+    archetype_override: Optional[str] = Field(None, description="Custom persona text")
+
+
+class AgentOverrideResponse(BaseModel):
+    """Response for agent override."""
+    agent_key: str
+    model: Optional[str] = None
+    archetype_override: Optional[str] = None
+    default_model: str = DEFAULT_MODEL
+    is_edited: bool = False
+
+
+class AgentOverridesMapResponse(BaseModel):
+    """Response containing all agent overrides for a scenario."""
+    scenario_id: UUID
+    overrides: dict[str, AgentOverrideResponse]
+    available_models: list[str] = ALLOWED_MODELS
+
+
+# =============================================================================
+# Agent Override Endpoints
+# =============================================================================
+
+@router.get("/scenario/{scenario_id}/agent-overrides", response_model=AgentOverridesMapResponse)
+async def get_agent_overrides(
+    scenario_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get all agent overrides for a scenario.
+    
+    Returns a map of agent_key -> override data, including defaults for agents
+    without overrides.
+    """
+    # Verify scenario exists
+    scenario_result = await db.execute(
+        select(Scenario).where(Scenario.id == scenario_id)
+    )
+    if not scenario_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Scenario {scenario_id} not found",
+        )
+    
+    # Get all overrides for this scenario
+    result = await db.execute(
+        select(AgentOverride).where(AgentOverride.scenario_id == scenario_id)
+    )
+    db_overrides = {o.agent_key: o for o in result.scalars().all()}
+    
+    # Build response with all agents (from definitions)
+    overrides: dict[str, AgentOverrideResponse] = {}
+    for agent in AGENTS:
+        agent_key = agent["key"]
+        db_override = db_overrides.get(agent_key)
+        
+        if db_override:
+            overrides[agent_key] = AgentOverrideResponse(
+                agent_key=agent_key,
+                model=db_override.model,
+                archetype_override=db_override.archetype_override,
+                default_model=DEFAULT_MODEL,
+                is_edited=bool(db_override.model or db_override.archetype_override),
+            )
+        else:
+            overrides[agent_key] = AgentOverrideResponse(
+                agent_key=agent_key,
+                model=None,
+                archetype_override=None,
+                default_model=DEFAULT_MODEL,
+                is_edited=False,
+            )
+    
+    return AgentOverridesMapResponse(
+        scenario_id=scenario_id,
+        overrides=overrides,
+        available_models=ALLOWED_MODELS,
+    )
+
+
+@router.put("/scenario/{scenario_id}/agents/{agent_key}", response_model=AgentOverrideResponse)
+async def update_agent_override(
+    scenario_id: UUID,
+    agent_key: str,
+    update: AgentOverrideUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update a single agent's model or archetype override.
+    
+    Invalidates the promotion cache for this scenario.
+    """
+    # Verify scenario exists
+    scenario_result = await db.execute(
+        select(Scenario).where(Scenario.id == scenario_id)
+    )
+    if not scenario_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Scenario {scenario_id} not found",
+        )
+    
+    # Verify agent exists
+    if not get_agent(agent_key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid agent key: {agent_key}",
+        )
+    
+    # Validate model if provided
+    if update.model and not validate_model(update.model):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid model: {update.model}. Allowed: {ALLOWED_MODELS}",
+        )
+    
+    # Get or create override
+    result = await db.execute(
+        select(AgentOverride).where(
+            AgentOverride.scenario_id == scenario_id,
+            AgentOverride.agent_key == agent_key,
+        )
+    )
+    override = result.scalar_one_or_none()
+    
+    if override:
+        # Update existing
+        if update.model is not None:
+            override.model = update.model if update.model else None
+        if update.archetype_override is not None:
+            override.archetype_override = update.archetype_override if update.archetype_override else None
+    else:
+        # Create new
+        override = AgentOverride(
+            scenario_id=scenario_id,
+            agent_key=agent_key,
+            model=update.model,
+            archetype_override=update.archetype_override,
+        )
+        db.add(override)
+    
+    # Invalidate cache for this scenario
+    await db.execute(
+        delete(PromotionCache).where(PromotionCache.scenario_id == scenario_id)
+    )
+    
+    await db.commit()
+    await db.refresh(override)
+    
+    return AgentOverrideResponse(
+        agent_key=agent_key,
+        model=override.model,
+        archetype_override=override.archetype_override,
+        default_model=DEFAULT_MODEL,
+        is_edited=bool(override.model or override.archetype_override),
+    )
+
+
+@router.post("/scenario/{scenario_id}/agents/{agent_key}/reset", response_model=AgentOverrideResponse)
+async def reset_agent_override(
+    scenario_id: UUID,
+    agent_key: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Reset an agent to default model and archetype.
+    
+    Deletes the override record and invalidates the cache.
+    """
+    # Verify scenario exists
+    scenario_result = await db.execute(
+        select(Scenario).where(Scenario.id == scenario_id)
+    )
+    if not scenario_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Scenario {scenario_id} not found",
+        )
+    
+    # Verify agent exists
+    if not get_agent(agent_key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid agent key: {agent_key}",
+        )
+    
+    # Delete override if exists
+    await db.execute(
+        delete(AgentOverride).where(
+            AgentOverride.scenario_id == scenario_id,
+            AgentOverride.agent_key == agent_key,
+        )
+    )
+    
+    # Invalidate cache
+    await db.execute(
+        delete(PromotionCache).where(PromotionCache.scenario_id == scenario_id)
+    )
+    
+    await db.commit()
+    
+    return AgentOverrideResponse(
+        agent_key=agent_key,
+        model=None,
+        archetype_override=None,
+        default_model=DEFAULT_MODEL,
+        is_edited=False,
+    )
+
+
+@router.post("/scenario/{scenario_id}/agents/reset-all")
+async def reset_all_agent_overrides(
+    scenario_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Reset all agents to defaults for a scenario.
+    
+    Deletes all override records and invalidates the cache.
+    """
+    # Verify scenario exists
+    scenario_result = await db.execute(
+        select(Scenario).where(Scenario.id == scenario_id)
+    )
+    if not scenario_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Scenario {scenario_id} not found",
+        )
+    
+    # Delete all overrides
+    result = await db.execute(
+        delete(AgentOverride).where(AgentOverride.scenario_id == scenario_id)
+    )
+    
+    # Invalidate cache
+    await db.execute(
+        delete(PromotionCache).where(PromotionCache.scenario_id == scenario_id)
+    )
+    
+    await db.commit()
+    
+    return {
+        "success": True,
+        "scenario_id": str(scenario_id),
+        "message": "All agent overrides reset to defaults",
+    }
 
