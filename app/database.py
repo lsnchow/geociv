@@ -1,14 +1,48 @@
 """Database configuration and session management."""
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import get_settings
 
+
+def _normalize_db_url(url: str) -> str:
+    """
+    Guard against bad query params that asyncpg rejects.
+    - Convert any `sslmode` to `ssl=true`.
+    - Default to `ssl=true` if neither param is present.
+    """
+    split = urlsplit(url)
+    query = dict(parse_qsl(split.query, keep_blank_values=True))
+
+    if "sslmode" in query:
+        sslmode = query.pop("sslmode")
+        # map common sslmode settings to ssl boolean
+        if sslmode.lower() == "disable":
+            query.setdefault("ssl", "false")
+        else:
+            query.setdefault("ssl", "true")
+
+    query.setdefault("ssl", "true")
+
+    new_query = urlencode(query)
+    return urlunsplit(
+        (
+            split.scheme,
+            split.netloc,
+            split.path,
+            new_query,
+            split.fragment,
+        )
+    )
+
+
 settings = get_settings()
 
 engine = create_async_engine(
-    settings.database_url,
+    _normalize_db_url(settings.database_url),
     echo=settings.debug,
     future=True,
 )
@@ -42,4 +76,3 @@ async def get_db() -> AsyncSession:
             raise
         finally:
             await session.close()
-
