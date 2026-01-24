@@ -25,6 +25,10 @@ class RelationshipEdge:
     to_agent: str
     score: float  # -1 to +1
     last_reason: str = ""
+    last_message: str = ""  # Last DM message snippet (max 120 chars)
+    stance_before: Optional[str] = None  # support/oppose/neutral
+    stance_after: Optional[str] = None
+    timestamp: Optional[str] = None  # ISO8601
 
 
 @dataclass
@@ -88,8 +92,18 @@ class SessionThreads:
         """Get key for directed relationship."""
         return f"{from_agent}->{to_agent}"
     
-    def update_relationship(self, from_agent: str, to_agent: str, delta: float, reason: str = "") -> float:
+    def update_relationship(
+        self, 
+        from_agent: str, 
+        to_agent: str, 
+        delta: float, 
+        reason: str = "",
+        message: str = "",
+        stance_before: Optional[str] = None,
+        stance_after: Optional[str] = None,
+    ) -> float:
         """Update relationship score and return new value."""
+        import datetime
         key = self.get_relationship_key(from_agent, to_agent)
         if key not in self.relationships:
             self.relationships[key] = RelationshipEdge(from_agent=from_agent, to_agent=to_agent, score=0.0)
@@ -98,6 +112,13 @@ class SessionThreads:
         edge.score = max(-1.0, min(1.0, edge.score + delta))  # Clamp to [-1, 1]
         if reason:
             edge.last_reason = reason
+        if message:
+            edge.last_message = message[:120]  # Max 120 chars
+        if stance_before:
+            edge.stance_before = stance_before
+        if stance_after:
+            edge.stance_after = stance_after
+        edge.timestamp = datetime.datetime.utcnow().isoformat()
         
         logger.info(f"[RELATIONSHIP] {from_agent} -> {to_agent}: {edge.score:.2f} ({reason})")
         return edge.score
@@ -113,6 +134,10 @@ class SessionThreads:
         edges = [e for e in self.relationships.values() if abs(e.score) > 0.1]
         edges.sort(key=lambda e: abs(e.score), reverse=True)
         return edges[:n]
+    
+    def get_all_edges(self) -> list[RelationshipEdge]:
+        """Get all relationship edges for graph visualization."""
+        return list(self.relationships.values())
 
 
 class SessionManager:

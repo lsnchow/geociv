@@ -1330,3 +1330,141 @@
 2026-01-24 14:08:30 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=unknown | thread_id=02889127-2e68-43ce-9ff0-1bbd8ecd40cb | output_length=1175 chars | output_tokens_est=293 | ttft=5.983s (time to first token) | total=5.983s | tokens_per_sec=80
 2026-01-24 14:08:30 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=unknown | thread_id=c18bde85-4a09-45cd-87c8-ab874fdb65ba | model=amazon/nova-micro-v1 | provider=amazon | input_length=742 chars | input_tokens_est=185
 2026-01-24 14:08:36 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=unknown | thread_id=c18bde85-4a09-45cd-87c8-ab874fdb65ba | output_length=1219 chars | output_tokens_est=304 | ttft=5.844s (time to first token) | total=5.845s | tokens_per_sec=84
+2026-01-24 15:09:01 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=unknown | name=CivicSim Interpreter | prompt_length=88 chars
+2026-01-24 15:09:02 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=unknown | assistant_id=e4fbba87-dac4-4c95-a005-d356c0d58ebd | duration=1.156s
+2026-01-24 15:09:02 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=interpreter.interpret | assistant_id=e4fbba87-dac4-4c95-a005-d356c0d58ebd
+2026-01-24 15:09:02 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=interpreter.interpret | thread_id=6f80d066-b313-4cca-84a4-0202c5bd832e | duration=0.330s
+2026-01-24 15:09:02 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=interpreter.interpret | thread_id=6f80d066-b313-4cca-84a4-0202c5bd832e | model=amazon/nova-micro-v1 | provider=amazon | input_length=1345 chars | input_tokens_est=336
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=interpreter.interpret | thread_id=6f80d066-b313-4cca-84a4-0202c5bd832e | output_length=747 chars | output_tokens_est=186 | ttft=13.448s (time to first token) | total=13.448s | tokens_per_sec=39
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:16 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=reactor.setup | name=CivicSim Agent | prompt_length=99 chars
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=da72c4c0-6131-4261-b04c-b384a1841f1f | duration=0.629s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=da72c4c0-6131-4261-b04c-b384a1841f1f
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=29dc58bc-94c7-411b-a6cd-299223a65d88 | duration=0.631s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=29dc58bc-94c7-411b-a6cd-299223a65d88
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=7db97580-a72e-4f34-9132-d018c51cce6c | duration=0.596s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=7db97580-a72e-4f34-9132-d018c51cce6c
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=0f0e5723-c0cc-4e83-b416-dd2c1aa186ad | duration=0.613s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=0f0e5723-c0cc-4e83-b416-dd2c1aa186ad
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=75d0bf33-0773-4fc4-b0b7-2c7b84320cbd | duration=0.640s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=75d0bf33-0773-4fc4-b0b7-2c7b84320cbd
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=a9ab9df1-83a4-4cad-8df1-4f890ddec725 | duration=0.620s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=a9ab9df1-83a4-4cad-8df1-4f890ddec725
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=fbab9b33-c686-4a94-838f-b67b58518072 | duration=0.599s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=fbab9b33-c686-4a94-838f-b67b58518072
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=157f22d8-101d-40cb-be04-c577a7352706 | duration=0.620s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=157f22d8-101d-40cb-be04-c577a7352706
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=156fdc0c-edd7-4e67-885b-ca8194317686 | duration=0.659s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=156fdc0c-edd7-4e67-885b-ca8194317686
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=611f8b5d-2a6f-40c2-a533-84f6797c76c4 | duration=0.680s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=611f8b5d-2a6f-40c2-a533-84f6797c76c4
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=501e6f39-e9c8-4a7a-8431-363545cd0266 | duration=0.676s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=501e6f39-e9c8-4a7a-8431-363545cd0266
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=a7d05335-7661-4646-a6cb-486c2d2fa6e4 | duration=0.641s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=a7d05335-7661-4646-a6cb-486c2d2fa6e4
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=69d50b99-68a7-450b-ac40-c7ffd82fe9b1 | duration=0.662s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=69d50b99-68a7-450b-ac40-c7ffd82fe9b1
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=9568c5cf-9573-4b33-a47b-2a49edec12fa | duration=0.655s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=9568c5cf-9573-4b33-a47b-2a49edec12fa
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=a88f9041-5294-4664-a0e4-efbe30e3ef8e | duration=0.670s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=a88f9041-5294-4664-a0e4-efbe30e3ef8e
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=f3d2d5ae-72c8-4ece-ad87-ff6371a65456 | duration=0.735s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=f3d2d5ae-72c8-4ece-ad87-ff6371a65456
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=af138947-f6d6-4972-81fd-a3062acc191d | duration=0.693s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=af138947-f6d6-4972-81fd-a3062acc191d
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=1373a3cb-1835-4505-81ad-cb599903e55e | duration=0.671s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=1373a3cb-1835-4505-81ad-cb599903e55e
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=9dfb47d0-02d4-4626-b6c7-e1ef860fd1ee | duration=0.717s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=9dfb47d0-02d4-4626-b6c7-e1ef860fd1ee
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=e1736968-f0b2-45a4-9207-a547c00f4cb6 | duration=0.753s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=e1736968-f0b2-45a4-9207-a547c00f4cb6
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=reactor.setup | assistant_id=e694a5c4-03ca-4d7c-a1c1-9fe57c98ef70 | duration=0.778s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=reactor.setup | assistant_id=e694a5c4-03ca-4d7c-a1c1-9fe57c98ef70
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=801bddf1-160f-487d-859c-53b78a0e71e8 | duration=0.316s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[skeleton_park] | thread_id=801bddf1-160f-487d-859c-53b78a0e71e8 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2247 chars | input_tokens_est=561
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=f3d30353-9edf-4d3f-90e5-cf3414fa40c0 | duration=0.372s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[williamsville] | thread_id=f3d30353-9edf-4d3f-90e5-cf3414fa40c0 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2221 chars | input_tokens_est=555
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=c2eddefa-619d-40d6-a6c7-5e235da69459 | duration=0.376s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[henderson] | thread_id=c2eddefa-619d-40d6-a6c7-5e235da69459 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2277 chars | input_tokens_est=569
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=d8d4f8dd-6abc-4121-9582-6c4b6a9ee2e7 | duration=0.367s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[kingscourt] | thread_id=d8d4f8dd-6abc-4121-9582-6c4b6a9ee2e7 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2218 chars | input_tokens_est=554
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=93f8960a-20f7-4899-9bf2-23aeec820f67 | duration=0.389s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[rideau_heights] | thread_id=93f8960a-20f7-4899-9bf2-23aeec820f67 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2299 chars | input_tokens_est=574
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=55520af2-a576-4944-89f6-a164d8a12535 | duration=0.409s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[market_square] | thread_id=55520af2-a576-4944-89f6-a164d8a12535 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2234 chars | input_tokens_est=558
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=e96d50e4-8130-47ab-bc8a-9c1f5f9bb862 | duration=0.382s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[cataraqui_west] | thread_id=e96d50e4-8130-47ab-bc8a-9c1f5f9bb862 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2273 chars | input_tokens_est=568
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=2f3eb577-bf26-4396-9e2c-42d522e0477a | duration=0.352s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[inner_harbour] | thread_id=2f3eb577-bf26-4396-9e2c-42d522e0477a | model=amazon/nova-micro-v1 | provider=amazon | input_length=2262 chars | input_tokens_est=565
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=6118f363-abe7-4c23-a809-2d850c069a4f | duration=0.412s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[calvin_park] | thread_id=6118f363-abe7-4c23-a809-2d850c069a4f | model=amazon/nova-micro-v1 | provider=amazon | input_length=2228 chars | input_tokens_est=557
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=8183be9d-8d28-4b84-9e3b-af1e50444632 | duration=0.402s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[victoria_park] | thread_id=8183be9d-8d28-4b84-9e3b-af1e50444632 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2282 chars | input_tokens_est=570
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=332525e1-e033-4393-8e3f-1379f90f8c28 | duration=0.416s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[strathcona_park] | thread_id=332525e1-e033-4393-8e3f-1379f90f8c28 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2306 chars | input_tokens_est=576
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=fe799e82-648c-4fa3-bf4b-85b6119839ef | duration=0.446s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[portsmouth] | thread_id=fe799e82-648c-4fa3-bf4b-85b6119839ef | model=amazon/nova-micro-v1 | provider=amazon | input_length=2273 chars | input_tokens_est=568
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=e388269c-1c1a-4a0f-bf5d-d5f41699bc40 | duration=0.395s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[north_end] | thread_id=e388269c-1c1a-4a0f-bf5d-d5f41699bc40 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2235 chars | input_tokens_est=558
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=5943cc6f-f517-4585-a26f-2e23a2f0d7b2 | duration=0.365s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[sydenham] | thread_id=5943cc6f-f517-4585-a26f-2e23a2f0d7b2 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2229 chars | input_tokens_est=557
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=67068687-5958-4a92-917d-d99669ed8064 | duration=0.437s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[queens_west] | thread_id=67068687-5958-4a92-917d-d99669ed8064 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2300 chars | input_tokens_est=575
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=1ff7f46e-73dc-432c-b935-910985cbef6e | duration=0.435s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[highway_15_corridor] | thread_id=1ff7f46e-73dc-432c-b935-910985cbef6e | model=amazon/nova-micro-v1 | provider=amazon | input_length=2254 chars | input_tokens_est=563
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=65f55110-4433-473b-b71d-bdd1b0a1a53a | duration=0.450s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[johnson_triangle] | thread_id=65f55110-4433-473b-b71d-bdd1b0a1a53a | model=amazon/nova-micro-v1 | provider=amazon | input_length=2285 chars | input_tokens_est=571
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=93142aa8-aa16-4738-8f54-be17dacbdd5e | duration=0.381s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[lake_ontario_park] | thread_id=93142aa8-aa16-4738-8f54-be17dacbdd5e | model=amazon/nova-micro-v1 | provider=amazon | input_length=2274 chars | input_tokens_est=568
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=b9f59b44-98e4-4b5f-9c40-f909aa1062e0 | duration=0.696s
+2026-01-24 15:09:17 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[union_stuart] | thread_id=b9f59b44-98e4-4b5f-9c40-f909aa1062e0 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2263 chars | input_tokens_est=565
+2026-01-24 15:09:18 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=5905476a-35ba-4a14-b762-96fd097d3f88 | duration=1.038s
+2026-01-24 15:09:18 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[queens_main] | thread_id=5905476a-35ba-4a14-b762-96fd097d3f88 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2243 chars | input_tokens_est=560
+2026-01-24 15:09:18 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=reactor.setup | thread_id=3de58260-0770-4d58-8ffa-7a7fa8c36e75 | duration=1.672s
+2026-01-24 15:09:18 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=reactor.react[cataraqui_centre] | thread_id=3de58260-0770-4d58-8ffa-7a7fa8c36e75 | model=amazon/nova-micro-v1 | provider=amazon | input_length=2228 chars | input_tokens_est=557
+2026-01-24 15:09:32 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[queens_main] | thread_id=5905476a-35ba-4a14-b762-96fd097d3f88 | output_length=1703 chars | output_tokens_est=425 | ttft=14.238s (time to first token) | total=14.238s | tokens_per_sec=69
+2026-01-24 15:09:33 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[inner_harbour] | thread_id=2f3eb577-bf26-4396-9e2c-42d522e0477a | output_length=958 chars | output_tokens_est=239 | ttft=15.930s (time to first token) | total=15.930s | tokens_per_sec=50
+2026-01-24 15:09:33 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[calvin_park] | thread_id=6118f363-abe7-4c23-a809-2d850c069a4f | output_length=938 chars | output_tokens_est=234 | ttft=16.360s (time to first token) | total=16.360s | tokens_per_sec=48
+2026-01-24 15:09:34 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[queens_west] | thread_id=67068687-5958-4a92-917d-d99669ed8064 | output_length=1195 chars | output_tokens_est=298 | ttft=17.391s (time to first token) | total=17.392s | tokens_per_sec=50
+2026-01-24 15:09:36 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[kingscourt] | thread_id=d8d4f8dd-6abc-4121-9582-6c4b6a9ee2e7 | output_length=791 chars | output_tokens_est=197 | ttft=19.298s (time to first token) | total=19.298s | tokens_per_sec=39
+2026-01-24 15:09:36 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[union_stuart] | thread_id=b9f59b44-98e4-4b5f-9c40-f909aa1062e0 | output_length=1109 chars | output_tokens_est=277 | ttft=19.123s (time to first token) | total=19.123s | tokens_per_sec=44
+2026-01-24 15:09:38 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[williamsville] | thread_id=f3d30353-9edf-4d3f-90e5-cf3414fa40c0 | output_length=1043 chars | output_tokens_est=260 | ttft=21.412s (time to first token) | total=21.412s | tokens_per_sec=38
+2026-01-24 15:09:38 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[johnson_triangle] | thread_id=65f55110-4433-473b-b71d-bdd1b0a1a53a | output_length=1014 chars | output_tokens_est=253 | ttft=21.229s (time to first token) | total=21.229s | tokens_per_sec=39
+2026-01-24 15:09:38 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[strathcona_park] | thread_id=332525e1-e033-4393-8e3f-1379f90f8c28 | output_length=1179 chars | output_tokens_est=294 | ttft=21.311s (time to first token) | total=21.311s | tokens_per_sec=41
+2026-01-24 15:09:38 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[highway_15_corridor] | thread_id=1ff7f46e-73dc-432c-b935-910985cbef6e | output_length=978 chars | output_tokens_est=244 | ttft=21.257s (time to first token) | total=21.257s | tokens_per_sec=38
+2026-01-24 15:09:40 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[north_end] | thread_id=e388269c-1c1a-4a0f-bf5d-d5f41699bc40 | output_length=1160 chars | output_tokens_est=290 | ttft=22.688s (time to first token) | total=22.688s | tokens_per_sec=37
+2026-01-24 15:09:40 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[rideau_heights] | thread_id=93f8960a-20f7-4899-9bf2-23aeec820f67 | output_length=1268 chars | output_tokens_est=317 | ttft=22.962s (time to first token) | total=22.962s | tokens_per_sec=39
+2026-01-24 15:09:40 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[henderson] | thread_id=c2eddefa-619d-40d6-a6c7-5e235da69459 | output_length=1078 chars | output_tokens_est=269 | ttft=23.108s (time to first token) | total=23.108s | tokens_per_sec=36
+2026-01-24 15:09:40 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[lake_ontario_park] | thread_id=93142aa8-aa16-4738-8f54-be17dacbdd5e | output_length=1488 chars | output_tokens_est=372 | ttft=22.947s (time to first token) | total=22.947s | tokens_per_sec=41
+2026-01-24 15:09:40 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[sydenham] | thread_id=5943cc6f-f517-4585-a26f-2e23a2f0d7b2 | output_length=1136 chars | output_tokens_est=284 | ttft=22.976s (time to first token) | total=22.976s | tokens_per_sec=37
+2026-01-24 15:09:40 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[skeleton_park] | thread_id=801bddf1-160f-487d-859c-53b78a0e71e8 | output_length=1268 chars | output_tokens_est=317 | ttft=23.449s (time to first token) | total=23.449s | tokens_per_sec=37
+2026-01-24 15:09:40 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[portsmouth] | thread_id=fe799e82-648c-4fa3-bf4b-85b6119839ef | output_length=1028 chars | output_tokens_est=257 | ttft=23.365s (time to first token) | total=23.365s | tokens_per_sec=35
+2026-01-24 15:09:41 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[victoria_park] | thread_id=8183be9d-8d28-4b84-9e3b-af1e50444632 | output_length=1308 chars | output_tokens_est=327 | ttft=24.237s (time to first token) | total=24.237s | tokens_per_sec=37
+2026-01-24 15:09:42 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[cataraqui_centre] | thread_id=3de58260-0770-4d58-8ffa-7a7fa8c36e75 | output_length=1216 chars | output_tokens_est=304 | ttft=23.964s (time to first token) | total=23.964s | tokens_per_sec=36
+2026-01-24 15:09:42 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[market_square] | thread_id=55520af2-a576-4944-89f6-a164d8a12535 | output_length=1046 chars | output_tokens_est=261 | ttft=25.526s (time to first token) | total=25.526s | tokens_per_sec=32
+2026-01-24 15:09:44 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=reactor.react[cataraqui_west] | thread_id=e96d50e4-8130-47ab-bc8a-9c1f5f9bb862 | output_length=1100 chars | output_tokens_est=275 | ttft=26.672s (time to first token) | total=26.672s | tokens_per_sec=32
+2026-01-24 15:09:44 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=unknown | name=CivicSim Town Hall | prompt_length=104 chars
+2026-01-24 15:09:44 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=unknown | assistant_id=3e11be05-7459-47d5-b918-29216a4486f9 | duration=0.318s
+2026-01-24 15:09:44 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=townhall.generate | assistant_id=3e11be05-7459-47d5-b918-29216a4486f9
+2026-01-24 15:09:44 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=townhall.generate | thread_id=82a4e339-070d-4df1-9a12-7600b69bd51f | duration=0.228s
+2026-01-24 15:09:44 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=townhall.generate | thread_id=82a4e339-070d-4df1-9a12-7600b69bd51f | model=amazon/nova-micro-v1 | provider=amazon | input_length=8776 chars | input_tokens_est=2194
+2026-01-24 15:09:59 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=townhall.generate | thread_id=82a4e339-070d-4df1-9a12-7600b69bd51f | output_length=2335 chars | output_tokens_est=583 | ttft=14.722s (time to first token) | total=14.722s | tokens_per_sec=189

@@ -6,7 +6,7 @@ import { ProposalPalette } from './components/palette';
 import { ResultsPanel } from './components/results';
 import { ProposalEditor } from './components/editor';
 import { HistoryTimeline } from './components/history';
-import { AgentGraph } from './components/graph';
+import { AgentGraphTrigger } from './components/graph';
 import { AICopilot } from './components/copilot';
 import { VariantGrid } from './components/variants';
 import { TownHallPanel, TownHallTranscript as TownHallTranscriptComponent, AgentReactions } from './components/townhall';
@@ -398,10 +398,8 @@ function App() {
                 {rightPanelTab === 'townhall' && <TownHallTranscriptComponent />}
               </div>
               
-              {/* Agent Graph - replaces History tab */}
-              <div className="h-56 border-t border-civic-border overflow-hidden">
-                <AgentGraph />
-              </div>
+              {/* Agent Graph Trigger - opens fullscreen force-directed graph */}
+              <AgentGraphTrigger />
             </div>
           )}
         </div>

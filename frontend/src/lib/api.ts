@@ -328,5 +328,61 @@ export async function getLLMStats(): Promise<LLMStatsResponse> {
   return request<LLMStatsResponse>('/llm-stats');
 }
 
+// =============================================================================
+// Graph Data (Agent Network Visualization)
+// =============================================================================
+
+export interface GraphNodeData {
+  id: string;
+  type: string;
+  name: string;
+  avatar: string;
+  role?: string;
+  model?: string | null;
+  archetype_status?: string;
+  call_state?: string;
+  stance?: string | null;
+}
+
+export interface GraphEdgeData {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  last_message?: string | null;
+  stance_before?: string | null;
+  stance_after?: string | null;
+  timestamp?: string | null;
+  status?: string;
+  score?: number;
+}
+
+export interface GraphDataResponse {
+  session_id: string;
+  nodes: GraphNodeData[];
+  edges: GraphEdgeData[];
+}
+
+export interface ActiveCallData {
+  agent_key: string;
+  status: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface ActiveCallsResponse {
+  session_id: string;
+  active_calls: ActiveCallData[];
+  recently_completed: ActiveCallData[];
+}
+
+export async function getGraphData(sessionId: string): Promise<GraphDataResponse> {
+  return request<GraphDataResponse>(`/ai/graph-data/${sessionId}`);
+}
+
+export async function pollActiveCalls(sessionId: string): Promise<ActiveCallsResponse> {
+  return request<ActiveCallsResponse>(`/ai/active-calls/${sessionId}`);
+}
+
 export { ApiError };
 

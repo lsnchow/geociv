@@ -11,6 +11,7 @@ import type {
   CitywideProposalType
 } from '../types';
 import type { SimulationResponse, ZoneSentiment, AgentReaction, TownHallTranscript, AdoptedEvent, InterpretedProposal, ProposalFeedItem, ProposalSource } from '../types/simulation';
+import type { GraphNode, GraphEdge, GraphFilters } from '../components/graph/graphTypes';
 import * as api from '../lib/api';
 
 // Relationship edge for visualization
@@ -146,6 +147,15 @@ interface CivicState {
   // Chat model override (per-message)
   chatModelOverride: string | null;  // null = use per-agent settings ("Auto")
   
+  // Graph State (for force-directed visualization)
+  graphNodes: GraphNode[];
+  graphEdges: GraphEdge[];
+  graphFilters: GraphFilters | null;
+  graphPollingActive: boolean;
+  
+  // Simulation Progress (for graph visualization)
+  simulationProgress: { phase: string; completedAgents: number; totalAgents: number } | null;
+  
   // UI State
   leftPanelOpen: boolean;
   rightPanelOpen: boolean;
@@ -232,6 +242,11 @@ interface CivicState {
   
   // Chat model override
   setChatModelOverride: (model: string | null) => void;
+  
+  // Graph actions
+  loadGraphData: (sessionId: string) => Promise<void>;
+  pollActiveCalls: (sessionId: string) => Promise<void>;
+  setGraphFilters: (filters: GraphFilters) => void;
 }
 
 // Default proposal values
@@ -321,6 +336,15 @@ export const useCivicStore = create<CivicState>()(
       
       // Chat model override
       chatModelOverride: null,
+      
+      // Graph State
+      graphNodes: [],
+      graphEdges: [],
+      graphFilters: null,
+      graphPollingActive: false,
+      
+      // Simulation Progress
+      simulationProgress: null,
       
       leftPanelOpen: true,
       rightPanelOpen: true,
@@ -1386,6 +1410,77 @@ export const useCivicStore = create<CivicState>()(
       // Chat model override
       setChatModelOverride: (model: string | null) => {
         set({ chatModelOverride: model });
+      },
+      
+      // Graph actions
+      loadGraphData: async (sessionId: string) => {
+        try {
+          const response = await api.getGraphData(sessionId);
+          
+          // Transform API response to GraphNode/GraphEdge types
+          const nodes: GraphNode[] = response.nodes.map((n: api.GraphNodeData) => ({
+            id: n.id,
+            type: n.type as 'agent' | 'townhall' | 'user' | 'system',
+            name: n.name,
+            avatar: n.avatar,
+            role: n.role || '',
+            model: n.model || null,
+            archetypeStatus: (n.archetype_status || 'default') as 'default' | 'edited',
+            callState: (n.call_state || 'idle') as 'idle' | 'pending' | 'running' | 'done' | 'error',
+            stance: n.stance as 'support' | 'oppose' | 'neutral' | null,
+          }));
+          
+          const edges: GraphEdge[] = response.edges.map((e: api.GraphEdgeData) => ({
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            type: e.type as 'dm' | 'call',
+            lastMessage: e.last_message || null,
+            stanceBefore: e.stance_before as 'support' | 'oppose' | 'neutral' | null,
+            stanceAfter: e.stance_after as 'support' | 'oppose' | 'neutral' | null,
+            timestamp: e.timestamp || null,
+            status: (e.status || 'complete') as 'pending' | 'running' | 'complete' | 'error',
+            score: e.score || 0,
+          }));
+          
+          set({ graphNodes: nodes, graphEdges: edges });
+        } catch (error) {
+          console.error('[STORE] loadGraphData failed:', error);
+        }
+      },
+      
+      pollActiveCalls: async (sessionId: string) => {
+        try {
+          const response = await api.pollActiveCalls(sessionId);
+          
+          // Update node call states based on active calls
+          set(state => {
+            const updatedNodes = state.graphNodes.map(node => {
+              // Check if this node has an active call
+              const activeCall = response.active_calls.find(
+                (c: api.ActiveCallData) => c.agent_key === node.id
+              );
+              const recentlyCompleted = response.recently_completed.find(
+                (c: api.ActiveCallData) => c.agent_key === node.id
+              );
+              
+              if (activeCall) {
+                return { ...node, callState: activeCall.status as 'pending' | 'running' };
+              } else if (recentlyCompleted) {
+                return { ...node, callState: 'done' as const };
+              }
+              return node;
+            });
+            
+            return { graphNodes: updatedNodes };
+          });
+        } catch (error) {
+          console.warn('[STORE] pollActiveCalls failed:', error);
+        }
+      },
+      
+      setGraphFilters: (filters: GraphFilters) => {
+        set({ graphFilters: filters });
       },
     }),
     {

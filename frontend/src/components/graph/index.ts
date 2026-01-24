@@ -1,2 +1,10 @@
 export { AgentGraph } from './AgentGraph';
 export { AgentNodeDrawer } from './AgentNodeDrawer';
+export { AgentGraphTrigger } from './AgentGraphTrigger';
+export { AgentGraphPopout } from './AgentGraphPopout';
+export { ForceGraph } from './ForceGraph';
+export { GraphNodeComponent } from './GraphNode';
+export { NodePopover } from './NodePopover';
+export { EdgeTooltip } from './EdgeTooltip';
+export { GraphFiltersBar } from './GraphFilters';
+export * from './graphTypes';

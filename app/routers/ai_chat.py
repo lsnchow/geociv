@@ -883,3 +883,177 @@ async def get_relationships(session_id: str):
             for e in edges
         ]
     }
+
+
+# =============================================================================
+# Graph Data Endpoints - For Force-Directed Node Graph
+# =============================================================================
+
+class GraphNodeResponse(BaseModel):
+    """Node in the agent graph."""
+    id: str
+    type: str  # agent | townhall | user | system
+    name: str
+    avatar: str
+    role: str = ""
+    model: Optional[str] = None
+    archetype_status: str = "default"  # default | edited
+    call_state: str = "idle"  # idle | pending | running | done | error
+    stance: Optional[str] = None  # support | oppose | neutral
+
+
+class GraphEdgeResponse(BaseModel):
+    """Edge in the agent graph."""
+    id: str
+    source: str
+    target: str
+    type: str  # dm | call
+    last_message: Optional[str] = None
+    stance_before: Optional[str] = None
+    stance_after: Optional[str] = None
+    timestamp: Optional[str] = None
+    status: str = "complete"  # pending | running | complete | error
+    score: float = 0.0
+
+
+class GraphDataResponse(BaseModel):
+    """Full graph data for visualization."""
+    session_id: str
+    nodes: list[GraphNodeResponse]
+    edges: list[GraphEdgeResponse]
+
+
+class ActiveCallResponse(BaseModel):
+    """Active call status."""
+    agent_key: str
+    status: str  # pending | running | done | error
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+class ActiveCallsResponse(BaseModel):
+    """Response for active calls polling."""
+    session_id: str
+    active_calls: list[ActiveCallResponse]
+    recently_completed: list[ActiveCallResponse]
+
+
+@router.get("/graph-data/{session_id}", response_model=GraphDataResponse)
+async def get_graph_data(session_id: str):
+    """
+    Get full graph data for force-directed visualization.
+    
+    Returns all nodes (agents, townhall, user, system) and edges (DMs, calls).
+    """
+    from app.agents.session_manager import get_session_manager
+    from app.agents.definitions import AGENTS, get_agent
+    from app.config import DEFAULT_MODEL
+    
+    session = get_session_manager().get_session(session_id)
+    
+    # Build nodes from agent definitions
+    nodes: list[GraphNodeResponse] = []
+    
+    # Add agent nodes
+    for agent in AGENTS:
+        agent_key = agent["key"]
+        
+        # Check if agent has a thread (has been used)
+        has_thread = agent_key in (session.agent_threads if session else {})
+        
+        nodes.append(GraphNodeResponse(
+            id=agent_key,
+            type="agent",
+            name=agent.get("display_name", agent.get("name", "Agent")),
+            avatar=agent.get("avatar", "👤"),
+            role=agent.get("role", ""),
+            model=None,  # Will be populated from DB if needed
+            archetype_status="default",
+            call_state="idle",
+            stance=None,
+        ))
+    
+    # Add special nodes
+    nodes.append(GraphNodeResponse(
+        id="townhall",
+        type="townhall",
+        name="Town Hall",
+        avatar="🏛️",
+        role="Civic Debate Forum",
+        call_state="idle",
+    ))
+    
+    nodes.append(GraphNodeResponse(
+        id="user",
+        type="user",
+        name="User",
+        avatar="👤",
+        role="Policy Proposer",
+        call_state="idle",
+    ))
+    
+    nodes.append(GraphNodeResponse(
+        id="system",
+        type="system",
+        name="Backboard",
+        avatar="🤖",
+        role="LLM Gateway",
+        call_state="idle",
+    ))
+    
+    # Build edges from relationships
+    edges: list[GraphEdgeResponse] = []
+    
+    if session:
+        edge_idx = 0
+        for edge in session.get_all_edges():
+            edges.append(GraphEdgeResponse(
+                id=f"edge_{edge_idx}",
+                source=edge.from_agent,
+                target=edge.to_agent,
+                type="dm",
+                last_message=edge.last_message[:120] if edge.last_message else None,
+                stance_before=edge.stance_before,
+                stance_after=edge.stance_after,
+                timestamp=edge.timestamp,
+                status="complete",
+                score=edge.score,
+            ))
+            edge_idx += 1
+    
+    return GraphDataResponse(
+        session_id=session_id,
+        nodes=nodes,
+        edges=edges,
+    )
+
+
+@router.get("/active-calls/{session_id}", response_model=ActiveCallsResponse)
+async def get_active_calls(session_id: str):
+    """
+    Get active and recently completed calls for polling.
+    
+    Returns:
+    - active_calls: Currently running agent calls
+    - recently_completed: Agents that finished within last 5 seconds (for green fade effect)
+    """
+    import datetime
+    
+    # Get current job status from job store
+    store = await get_job_store()
+    
+    # Find jobs for this session
+    active_calls: list[ActiveCallResponse] = []
+    recently_completed: list[ActiveCallResponse] = []
+    
+    # Get the most recent job for this session
+    # This is a simplified implementation - in production you'd track per-session jobs
+    
+    # For now, return empty if no active simulation
+    # The frontend will update node states based on simulation job status from the store
+    
+    return ActiveCallsResponse(
+        session_id=session_id,
+        active_calls=active_calls,
+        recently_completed=recently_completed,
+    )
