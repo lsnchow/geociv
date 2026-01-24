@@ -103,12 +103,18 @@ export function AICopilot() {
       updateSimulationJob(null);
       setIsProcessing(false);
     } else if (simulationJob?.status === 'error') {
-      const errorMessage: Message = {
+      const errorText = simulationJob.error || 'Unknown error';
+      const isClarification = /clarification/i.test(errorText);
+      
+      const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: `❌ Simulation failed: ${simulationJob.error || 'Unknown error'}`,
+        content: isClarification
+          ? `🔍 ${errorText}`
+          : `❌ Simulation failed: ${errorText}`,
       };
-      setMessages(prev => [...prev, errorMessage]);
+      
+      setMessages(prev => [...prev, assistantMessage]);
       updateSimulationJob(null);
       setIsProcessing(false);
     }
@@ -209,15 +215,15 @@ export function AICopilot() {
         
         if (useProgressiveSimulation) {
           // Use progressive simulation with real-time progress
-          await startProgressiveSimulation({
-            message: userMessage.content,
-            scenario_id: scenario.id,
-            thread_id: threadId || undefined,
-            auto_simulate: true,
-            speaker_mode: speakingAsAgent ? 'agent' : 'user',
-            speaker_agent_key: speakingAsAgent?.key,
-            world_state: worldState,
-          });
+          await startProgressiveSimulation(
+            userMessage.content,
+            scenario.id,
+            {
+              worldState,
+              speakerMode: speakingAsAgent ? 'agent' : 'user',
+              speakerAgentKey: speakingAsAgent?.key,
+            }
+          );
           // Don't set isProcessing to false here - the effect will handle it
           return;
         }

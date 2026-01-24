@@ -86,6 +86,28 @@ html, body, #root {
   display: none !important;
 }
 
+/* Clerk user button theming to match civic UI */
+.cl-userButtonPopover {
+  background: rgba(17, 17, 19, 0.96) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-civic-border);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.cl-userButtonPopoverActionButton,
+.cl-userButtonPopoverActionButton span,
+.cl-userButtonPopoverActionButton svg {
+  color: var(--color-civic-text) !important;
+}
+
+.cl-userButtonPopoverActionButton:hover {
+  background: var(--color-civic-elevated) !important;
+}
+
+.cl-userButtonPopoverSectionHeader {
+  color: var(--color-civic-text-secondary) !important;
+}
+
 /* ============================================================================
    Landing Page Animations
    ============================================================================ */

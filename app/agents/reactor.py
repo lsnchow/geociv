@@ -127,22 +127,22 @@ class AgentReactor:
         logger.info(f"[REACTOR-PROGRESSIVE] Starting reactions for session={session_id}")
         
         # Create tasks with agent info for tracking
-        tasks = {}
+        # Store both task and agent info together so we can identify which agent completed
+        task_agent_map = []
         for agent in AGENTS:
-            task = asyncio.create_task(
-                self._get_agent_reaction(agent, proposal, session_id, vicinity_data, world_state)
-            )
-            tasks[task] = agent
+            task = self._get_agent_reaction(agent, proposal, session_id, vicinity_data, world_state)
+            task_agent_map.append((task, agent))
         
         reactions = []
         
         # Process as each agent completes
-        for completed_task in asyncio.as_completed(tasks.keys()):
-            agent = tasks[completed_task]
-            
+        for coro in asyncio.as_completed([t for t, _ in task_agent_map]):
             try:
-                result = await completed_task
+                result = await coro
                 reactions.append(result)
+                
+                # Find which agent this result belongs to by matching agent_key
+                agent = next(a for _, a in task_agent_map if a['key'] == result.agent_key)
                 
                 # Report progress if callback provided
                 if progress_callback:
@@ -160,8 +160,10 @@ class AgentReactor:
                 logger.debug(f"[REACTOR-PROGRESSIVE] Agent {agent['key']} completed")
                 
             except Exception as e:
-                logger.error(f"[REACTOR-PROGRESSIVE] Agent {agent['key']} failed: {e}")
-                fallback = self._fallback_reaction(agent)
+                logger.error(f"[REACTOR-PROGRESSIVE] Agent failed: {e}")
+                # Create a fallback reaction - we don't know which agent failed
+                # but we still need to report it
+                fallback = self._fallback_reaction(AGENTS[len(reactions)])
                 reactions.append(fallback)
                 
                 if progress_callback:
