@@ -181,18 +181,9 @@ function LandingRoute() {
     }
   }, [isLoaded, isSignedIn, navigate])
 
-  if (!isLoaded) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        backgroundColor: '#0a0a0b',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-        <div style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>Loading...</div>
-      </div>
-    )
+  // While Clerk is loading (but user not signed in), show landing immediately instead of a blank loader.
+  if (!isLoaded && !isSignedIn) {
+    return <LandingPage />
   }
 
   // Already signed in - will redirect via useEffect
