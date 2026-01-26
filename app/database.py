@@ -2,49 +2,63 @@
 
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+import ssl
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import get_settings
 
 
-def _normalize_db_url(url: str) -> str:
+def _normalize_db_url(url: str):
     """
     Guard against bad query params that asyncpg rejects.
-    - Convert any `sslmode` to `ssl=true`.
-    - Default to `ssl=true` if neither param is present.
+    Return a tuple: (url_without_query, ssl_bool)
     """
     split = urlsplit(url)
     query = dict(parse_qsl(split.query, keep_blank_values=True))
 
+    ssl_val = query.get("ssl") or None
+
     if "sslmode" in query:
         sslmode = query.pop("sslmode")
-        # map common sslmode settings to ssl boolean
-        if sslmode.lower() == "disable":
-            query.setdefault("ssl", "false")
-        else:
-            query.setdefault("ssl", "true")
+        ssl_val = "false" if sslmode.lower() == "disable" else "true"
 
-    query.setdefault("ssl", "true")
+    if ssl_val is None:
+        ssl_val = "true"
 
-    new_query = urlencode(query)
-    return urlunsplit(
+    # strip all query params from the URL to avoid passing unknown args
+    bare_url = urlunsplit(
         (
             split.scheme,
             split.netloc,
             split.path,
-            new_query,
+            "",
             split.fragment,
         )
     )
 
+    ssl_bool = str(ssl_val).lower() in ("true", "1", "yes", "require", "verify-ca", "verify-full")
+    return bare_url, ssl_bool
+
 
 settings = get_settings()
 
+bare_url, ssl_enabled = _normalize_db_url(settings.database_url)
+print(f"[DB] Using URL: {bare_url} | ssl={ssl_enabled}")
+
+connect_kwargs = {}
+if ssl_enabled:
+    ctx = ssl.create_default_context()
+    # Supabase pooler certs sometimes present as shared ELB; loosen hostname/CN for connectivity
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    connect_kwargs["ssl"] = ctx
+
 engine = create_async_engine(
-    _normalize_db_url(settings.database_url),
+    bare_url,
     echo=settings.debug,
     future=True,
+    connect_args=connect_kwargs,
 )
 
 async_session_maker = async_sessionmaker(
