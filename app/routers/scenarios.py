@@ -175,14 +175,17 @@ async def seed_kingston_scenario(
     """
     from app.seed_data import get_kingston_scenario
     
-    # If multiple exist, reuse the newest to avoid 409/500s in prod
+    # If one already exists, return the most recent with clusters loaded
     result = await db.execute(
         select(Scenario)
         .where(Scenario.name == "Kingston, Ontario")
+        .options(
+            selectinload(Scenario.clusters)
+            .selectinload(Cluster.archetype_distributions)
+        )
         .order_by(Scenario.created_at.desc())
-        .limit(1)
     )
-    existing = result.scalar_one_or_none()
+    existing = result.scalars().first()
     
     if existing:
         return existing
