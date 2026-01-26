@@ -272,7 +272,7 @@ class CivicSimulator:
                 score = self._utility_to_score(avg_utility * exposure)
                 
                 region_approvals.append(RegionApproval(
-                    cluster_id=cluster.id,
+                    cluster_id=str(cluster.id),
                     cluster_name=cluster.name,
                     score=round(score, 1),
                     exposure=round(exposure, 2),
@@ -442,4 +442,3 @@ class CivicSimulator:
             ))
         
         return drivers
-
