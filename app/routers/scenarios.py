@@ -175,17 +175,17 @@ async def seed_kingston_scenario(
     """
     from app.seed_data import get_kingston_scenario
     
-    # Check if already exists
+    # If multiple exist, reuse the newest to avoid 409/500s in prod
     result = await db.execute(
-        select(Scenario).where(Scenario.name == "Kingston, Ontario")
+        select(Scenario)
+        .where(Scenario.name == "Kingston, Ontario")
+        .order_by(Scenario.created_at.desc())
+        .limit(1)
     )
     existing = result.scalar_one_or_none()
     
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Kingston scenario already exists. Delete it first to re-seed.",
-        )
+        return existing
     
     scenario_data = get_kingston_scenario()
     
@@ -527,4 +527,3 @@ async def reset_all_agent_overrides(
         "scenario_id": str(scenario_id),
         "message": "All agent overrides reset to defaults",
     }
-

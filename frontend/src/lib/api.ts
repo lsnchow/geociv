@@ -272,10 +272,10 @@ export interface PromoteResponse {
   message: string;
 }
 
-export async function promoteWithCache(request: PromoteRequest): Promise<PromoteResponse> {
+export async function promoteWithCache(payload: PromoteRequest): Promise<PromoteResponse> {
   return request<PromoteResponse>('/cache/promote', {
     method: 'POST',
-    body: JSON.stringify(request),
+    body: JSON.stringify(payload),
   });
 }
 

@@ -1,4 +1,3 @@
-import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 import { useCivicStore } from '../../store';
 import { Button, Badge } from '../ui';
 import kingstonZones from '../../data/kingston-zones.json';
@@ -16,10 +15,6 @@ export function Header() {
     setAutoSimulate,
   } = useCivicStore();
 
-  // Only show Clerk controls when a real publishable key is provided (dev fallback runs without ClerkProvider)
-  const clerkEnabled = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY) && 
-    !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.includes('your_clerk');
-  
   const regionCount = Math.max(scenario?.clusters?.length ?? 0, kingstonZones.features.length);
   
   return (
@@ -88,51 +83,6 @@ export function Header() {
           </svg>
         </button>
 
-        {clerkEnabled && (
-          <div className="h-10 w-px bg-civic-border" aria-hidden="true" />
-        )}
-
-        {clerkEnabled ? (
-          <>
-            <SignedIn>
-              <UserButton
-                afterSignOutUrl="/"
-                userProfileMode="modal"
-                appearance={{
-                  elements: {
-                    userButtonBox: "flex items-center",
-                    userButtonAvatarBox: "w-10 h-10",
-                    userButtonPopoverCard: "bg-civic-surface/95 backdrop-blur border border-civic-border shadow-2xl",
-                    userButtonPopoverFooter: "hidden", // hide dev watermark footer clipping into layout
-                    userButtonPopoverActionButton: "text-civic-text hover:bg-civic-elevated",
-                    userButtonPopoverActionButtonIcon: "text-civic-text-secondary",
-                    userButtonPopoverActionButtonText: "text-civic-text",
-                    userButtonPopoverSectionHeaderText: "text-civic-text-secondary",
-                  },
-                  variables: {
-                    colorBackground: "var(--color-civic-surface)",
-                    colorText: "var(--color-civic-text)",
-                    colorPrimary: "var(--color-civic-accent)",
-                    borderRadius: "12px",
-                    shadow: "0 20px 60px rgba(0,0,0,0.35)",
-                  },
-                }}
-              >
-                <UserButton.MenuItems>
-                  <UserButton.Action label="Manage account" action="manageAccount" />
-                  <UserButton.Action label="Sign out" action="signOut" />
-                </UserButton.MenuItems>
-              </UserButton>
-            </SignedIn>
-            <SignedOut>
-              <SignInButton mode="modal">
-                <Button size="sm" variant="outline">
-                  Sign in
-                </Button>
-              </SignInButton>
-            </SignedOut>
-          </>
-        ) : null}
       </div>
     </header>
   );
