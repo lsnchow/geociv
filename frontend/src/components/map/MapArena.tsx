@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, Component, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, useEffect, Component, type ReactNode } from 'react';
 import { Map } from 'react-map-gl/maplibre';
 import DeckGL from '@deck.gl/react';
 import { TextLayer, PolygonLayer, GeoJsonLayer, ScatterplotLayer } from '@deck.gl/layers';
@@ -20,6 +20,13 @@ import {
 } from '../../lib/grid-utils';
 import kingstonZones from '../../data/kingston-zones.json';
 import 'maplibre-gl/dist/maplibre-gl.css';
+
+const isWebGLAvailable = () => {
+  if (typeof document === 'undefined') return false;
+  const canvas = document.createElement('canvas');
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  return Boolean(gl);
+};
 
 // Default agent avatars by region (agent_key == region_id)
 const DEFAULT_AGENTS: Record<string, { avatar: string; name: string; role: string }> = {
@@ -208,6 +215,22 @@ export function MapArena({}: MapArenaProps) {
   const [_isLoadingZone, setIsLoadingZone] = useState(false);
   // Suppress unused variable warnings - these are used by setters
   void _zoneDescription; void _isLoadingZone;
+  const [webglSupported, setWebglSupported] = useState(true);
+
+  useEffect(() => {
+    setWebglSupported(isWebGLAvailable());
+  }, []);
+
+  if (!webglSupported) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-civic-text gap-2 p-4">
+        <div className="text-xl">⚠️ WebGL not available</div>
+        <div className="text-sm text-civic-text-secondary text-center max-w-md">
+          Your browser or device blocked WebGL, which the map needs. Enable hardware acceleration or switch browsers.
+        </div>
+      </div>
+    );
+  }
   
   // Build mode state - ghost marker during drag
   const [dragGhostPosition, setDragGhostPosition] = useState<{ lat: number; lng: number } | null>(null);
@@ -371,14 +394,16 @@ export function MapArena({}: MapArenaProps) {
       );
       const n = coords.length;
       
-      const sentiment = zoneSentiments.find(z => z.zone_id === feature.properties.id);
+      const sentiment = Array.isArray(zoneSentiments)
+        ? zoneSentiments.find(z => z.zone_id === feature.properties.id)
+        : undefined;
       const scoreText = sentiment 
         ? (sentiment.score > 0 ? '+' : '') + (sentiment.score * 100).toFixed(0) + '%'
         : '';
       
       // Find the regional agent for this zone (agent_key == zone_id)
       // Use simulation data if available, otherwise fall back to defaults
-      const simAgent = agentSimulation?.reactions.find(r => r.agent_key === feature.properties.id);
+      const simAgent = agentSimulation?.reactions?.find?.(r => r.agent_key === feature.properties.id);
       const defaultAgent = DEFAULT_AGENTS[feature.properties.id];
       const avatar = simAgent?.avatar || defaultAgent?.avatar || '';
       

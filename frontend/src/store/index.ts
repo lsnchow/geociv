@@ -649,17 +649,35 @@ export const useCivicStore = create<CivicState>()(
           const data = await response.json();
           const jobId = data.job_id;
           
-          set((state) => ({
-            simulationJob: {
-              ...state.simulationJob,
-              jobId,
-              status: 'pending',
-              message: 'Simulation queued...',
-            },
-          }));
-          
-          // Start polling
-          get().pollSimulationStatus(jobId);
+          if (jobId) {
+            set((state) => ({
+              simulationJob: {
+                ...state.simulationJob,
+                jobId,
+                status: 'pending',
+                message: 'Simulation queued...',
+              },
+            }));
+            // Start polling
+            get().pollSimulationStatus(jobId);
+          } else {
+            // Immediate response (no background job) – treat as complete
+            set((state) => ({
+              isSimulating: false,
+              simulationJob: {
+                ...state.simulationJob,
+                status: 'complete',
+                progress: 100,
+                phase: 'complete',
+                message: 'Simulation finished',
+                result: data,
+              },
+              agentSimulation: data,
+              zoneSentiments: data.zones || [],
+              agentReactions: data.reactions || [],
+              townHall: data.town_hall || null,
+            }));
+          }
           
         } catch (error) {
           console.error('[SIM] Start failed:', error);
