@@ -65,7 +65,7 @@ export function NodePopover({
   }, [onClose]);
 
   // Debounced save
-  const saveTimeout = useRef<number | null>(null);
+  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
   
   const debouncedSave = useCallback(async (
     agentKey: string, 

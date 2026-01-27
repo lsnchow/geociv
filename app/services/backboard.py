@@ -104,12 +104,6 @@ class BackboardClient:
 
     async def _ensure_assistant(self) -> str:
         """Ensure the CivicSim assistant exists."""
-        # #region agent log
-        import json as _json
-        with open("/Users/lucas/Desktop/kinghacks/.cursor/debug.log", "a") as _f:
-            _f.write(_json.dumps({"location":"backboard.py:_ensure_assistant","message":"entry","data":{"has_cached":bool(self._assistant_id)},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","hypothesisId":"A"}) + "\n")
-        # #endregion
-        
         if self._assistant_id:
             return self._assistant_id
         
@@ -119,21 +113,11 @@ class BackboardClient:
                     "name": "CivicSim Agent v4",
                     "system_prompt": AGENT_SYSTEM_PROMPT,
                 }
-                # #region agent log
-                with open("/Users/lucas/Desktop/kinghacks/.cursor/debug.log", "a") as _f:
-                    _f.write(_json.dumps({"location":"backboard.py:_ensure_assistant","message":"creating assistant","data":{"prompt_len":len(AGENT_SYSTEM_PROMPT),"payload_keys":list(payload.keys())},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","hypothesisId":"B"}) + "\n")
-                # #endregion
-                
                 response = await client.post(
                     f"{self.base_url}/assistants",
                     headers=self.headers,
                     json=payload,
                 )
-                
-                # #region agent log
-                with open("/Users/lucas/Desktop/kinghacks/.cursor/debug.log", "a") as _f:
-                    _f.write(_json.dumps({"location":"backboard.py:_ensure_assistant","message":"create response","data":{"status":response.status_code,"body":response.text[:500]},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","hypothesisId":"B"}) + "\n")
-                # #endregion
                 
                 if response.status_code in (200, 201):
                     data = response.json()
@@ -201,13 +185,7 @@ class BackboardClient:
         # Validation: reject empty messages
         if not content or not content.strip():
             raise BackboardError("Cannot send empty message to Backboard", recoverable=False)
-        
-        # #region agent log
-        import json as _json
-        with open("/Users/lucas/Desktop/kinghacks/.cursor/debug.log", "a") as _f:
-            _f.write(_json.dumps({"location":"backboard.py:send_message","message":"entry","data":{"thread_id":thread_id,"content_len":len(content),"content_preview":content[:80]},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","hypothesisId":"C"}) + "\n")
-        # #endregion
-        
+
         print(f"[BACKBOARD] === send_message ===")
         print(f"[BACKBOARD] Inbound message length: {len(content)} chars")
         print(f"[BACKBOARD] Message preview: {repr(content[:100])}")
@@ -235,12 +213,7 @@ class BackboardClient:
                 
                 print(f"[BACKBOARD] Response status: {response.status_code}")
                 print(f"[BACKBOARD] Response body: {response.text[:500]}")
-                
-                # #region agent log
-                with open("/Users/lucas/Desktop/kinghacks/.cursor/debug.log", "a") as _f:
-                    _f.write(_json.dumps({"location":"backboard.py:send_message","message":"response","data":{"status":response.status_code,"body_preview":response.text[:300]},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","hypothesisId":"C"}) + "\n")
-                # #endregion
-                
+
                 if response.status_code == 200:
                     result = response.json()
                     return result

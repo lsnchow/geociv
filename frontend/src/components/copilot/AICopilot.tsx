@@ -99,8 +99,7 @@ export function AICopilot() {
       setAgentSimulation(response);
       
       // Auto-open the right panel if there are reactions
-      const reactions = Array.isArray(response.reactions) ? response.reactions : [];
-      if (reactions.length > 0 && !rightPanelOpen) {
+      if (response.reactions.length > 0 && !rightPanelOpen) {
         toggleRightPanel();
       }
       
@@ -448,7 +447,7 @@ export function AICopilot() {
                 </div>
                 
                 {/* Show simulation summary */}
-                {msg.simulationResponse && Array.isArray(msg.simulationResponse.reactions) && msg.simulationResponse.reactions.length > 0 && (
+                {msg.simulationResponse && msg.simulationResponse.reactions.length > 0 && (
                   <div className="mt-3 pt-2 border-t border-civic-border/30 space-y-2">
                     {/* Reaction counts */}
                     <div className="flex items-center gap-3 text-xs">

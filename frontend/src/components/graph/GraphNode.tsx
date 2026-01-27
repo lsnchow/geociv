@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import type { GraphNode, CallState } from './graphTypes';
-import { CALL_STATE_COLORS } from './graphTypes';
+import { CALL_STATE_COLORS, PROVIDER_COLORS, getModelShortName } from './graphTypes';
 
 interface GraphNodeComponentProps {
   node: GraphNode;
@@ -26,6 +26,8 @@ export function GraphNodeComponent({
   const lastPos = useRef<{ x: number; y: number } | null>(null);
 
   const stateColors = CALL_STATE_COLORS[node.callState];
+  const providerColors = PROVIDER_COLORS[node.model || 'default'] || PROVIDER_COLORS.default;
+  const modelName = getModelShortName(node.model);
   
   // Node radius based on type
   const radius = node.type === 'townhall' ? 35 : node.type === 'system' ? 30 : 28;

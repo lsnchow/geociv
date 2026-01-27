@@ -543,12 +543,6 @@ async def ai_chat(
             detail="Message cannot be empty"
         )
     
-    # #region agent log
-    import json as _json
-    with open("/Users/lucas/Desktop/kinghacks/.cursor/debug.log", "a") as _f:
-        _f.write(_json.dumps({"location":"ai.py:ai_chat","message":"entry","data":{"msg_len":len(request.message),"scenario_id":str(request.scenario_id),"thread_id":request.thread_id},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","hypothesisId":"D"}) + "\n")
-    # #endregion
-    
     logger.info(f"[AI_CHAT] Inbound message length: {len(request.message)} chars")
     logger.info(f"[AI_CHAT] Message preview: {repr(request.message[:100])}")
     
@@ -701,10 +695,6 @@ async def ai_chat(
         
     except BackboardError as e:
         logger.error(f"[AI_CHAT] BackboardError: {e}")
-        # #region agent log
-        with open("/Users/lucas/Desktop/kinghacks/.cursor/debug.log", "a") as _f:
-            _f.write(_json.dumps({"location":"ai.py:ai_chat","message":"BackboardError","data":{"error":str(e)},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","hypothesisId":"E"}) + "\n")
-        # #endregion
         # Return 502 Bad Gateway for Backboard failures
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -828,4 +818,3 @@ async def get_ai_receipt(run_id: str):
         timestamp="",
         recipe={},
     )
-

@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useCivicStore } from '../../store';
-import { Panel, PanelSection, Button } from '../ui';
+import { Panel, PanelSection, Button, Badge } from '../ui';
 import { AgentNodeDrawer } from './AgentNodeDrawer';
 
 // Provider colors for model chips

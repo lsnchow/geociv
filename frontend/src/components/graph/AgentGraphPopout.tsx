@@ -40,7 +40,7 @@ export function AgentGraphPopout({
   const [popoverAnchor, setPopoverAnchor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const pollingRef = useRef<number | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize filters if not set
   useEffect(() => {

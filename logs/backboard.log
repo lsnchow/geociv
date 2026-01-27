@@ -3446,3 +3446,9 @@
 2026-01-27 12:09:01 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=townhall.generate | thread_id=298e14ee-cca4-410b-8a15-f43ebbcc5274 | duration=0.544s
 2026-01-27 12:09:01 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=townhall.generate | thread_id=298e14ee-cca4-410b-8a15-f43ebbcc5274 | model=amazon/nova-micro-v1 | provider=amazon | input_length=8807 chars | input_tokens_est=2201
 2026-01-27 12:09:29 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=townhall.generate | thread_id=298e14ee-cca4-410b-8a15-f43ebbcc5274 | output_length=2574 chars | output_tokens_est=643 | ttft=27.963s (time to first token) | total=27.963s | tokens_per_sec=102
+2026-01-27 12:18:41 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_ASSISTANT | caller=unknown | name=CivicSim Interpreter | prompt_length=88 chars
+2026-01-27 12:18:41 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_ASSISTANT_SUCCESS | caller=unknown | assistant_id=9ebde2a5-baab-495c-9100-c10a6ffd0231 | duration=0.420s
+2026-01-27 12:18:41 - [BACKBOARD] - INFO - → BACKBOARD_CREATE_THREAD | caller=interpreter.interpret | assistant_id=9ebde2a5-baab-495c-9100-c10a6ffd0231
+2026-01-27 12:18:41 - [BACKBOARD] - INFO - ✓ BACKBOARD_CREATE_THREAD_SUCCESS | caller=interpreter.interpret | thread_id=7e9a5c52-5774-4be7-81c8-b89a0ca3e3ca | duration=0.203s
+2026-01-27 12:18:41 - [BACKBOARD] - INFO - → BACKBOARD_SEND_MESSAGE | caller=interpreter.interpret | thread_id=7e9a5c52-5774-4be7-81c8-b89a0ca3e3ca | model=amazon/nova-micro-v1 | provider=amazon | input_length=1307 chars | input_tokens_est=326
+2026-01-27 12:18:46 - [BACKBOARD] - INFO - ✓ BACKBOARD_SEND_MESSAGE_SUCCESS | caller=interpreter.interpret | thread_id=7e9a5c52-5774-4be7-81c8-b89a0ca3e3ca | output_length=197 chars | output_tokens_est=49 | ttft=5.054s (time to first token) | total=5.054s | tokens_per_sec=74

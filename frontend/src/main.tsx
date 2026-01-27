@@ -138,16 +138,13 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 // ============================================================================
-// Simple App Router (no auth)
+// App Router without auth
 // ============================================================================
 function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
-      <Route
-        path="/app"
-        element={<App />}
-      />
+      <Route path="/app" element={<App />} />
       {/* Catch-all: redirect to landing */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -155,9 +152,9 @@ function AppRouter() {
 }
 
 // ============================================================================
-// App Wrapper (no Clerk)
+// App Wrapper with Router
 // ============================================================================
-function AppWithRouter() {
+function AppShell() {
   return (
     <BrowserRouter>
       <AppRouter />
@@ -168,7 +165,7 @@ function AppWithRouter() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <AppWithRouter />
+      <AppShell />
     </ErrorBoundary>
   </StrictMode>,
 )

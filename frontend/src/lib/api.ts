@@ -7,7 +7,7 @@ import type {
 } from '../types';
 
 // Allow overriding API base for deployed environments; fall back to relative /v1 for local proxy.
-const API_BASE = (import.meta as any).env?.VITE_API_URL || '/v1';
+const API_BASE = ((import.meta as any).env?.VITE_API_URL || '/v1').replace(/\/$/, '');
 
 class ApiError extends Error {
   status: number;
@@ -272,10 +272,10 @@ export interface PromoteResponse {
   message: string;
 }
 
-export async function promoteWithCache(payload: PromoteRequest): Promise<PromoteResponse> {
+export async function promoteWithCache(request: PromoteRequest): Promise<PromoteResponse> {
   return request<PromoteResponse>('/cache/promote', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(request),
   });
 }
 

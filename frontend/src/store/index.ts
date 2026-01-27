@@ -77,20 +77,6 @@ export interface SimulationJob {
   result: unknown | null;  // Final simulation result
 }
 
-const INITIAL_SIMULATION_JOB: SimulationJob = {
-  jobId: null,
-  status: 'idle',
-  progress: 0,
-  phase: '',
-  message: '',
-  completedAgents: 0,
-  totalAgents: 0,
-  partialReactions: [],
-  partialZones: [],
-  error: null,
-  result: null,
-};
-
 interface CivicState {
   // Scenario
   scenario: Scenario | null;
@@ -207,7 +193,7 @@ interface CivicState {
   }) => Promise<void>;
   pollSimulationStatus: (jobId: string) => Promise<void>;
   cancelSimulation: () => void;
-  updateSimulationJob: (updates: Partial<SimulationJob> | null) => void;
+  updateSimulationJob: (updates: Partial<SimulationJob>) => void;
   
   addToHistory: (entry: HistoryEntry) => void;
   restoreFromHistory: (id: string) => void;
@@ -591,33 +577,24 @@ export const useCivicStore = create<CivicState>()(
       
       // Progressive simulation actions
       startProgressiveSimulation: async (message, scenarioId, options = {}) => {
-        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/v1/ai';
-        const { activeProposal } = get();
-
-        // Fallback proposal so API always receives a valid payload
-        const fallbackProposal = {
-          type: 'citywide' as const,
-          citywide_type: 'regulation',
-          title: message?.slice(0, 80) || 'General discussion',
-          description: message || 'General prompt',
-          amount: null,
-          percentage: null,
-          income_targeted: false,
-          target_income_level: null,
-          affects_renters: true,
-          affects_homeowners: true,
-          affects_businesses: true,
-        };
-        const proposalPayload = activeProposal ?? fallbackProposal;
+        const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8000/v1')
+          .replace(/\/$/, '');
+        const AI_BASE = `${apiBase}/ai`;
         
         // Reset simulation job state
         set({
           isSimulating: true,
           simulationJob: {
-            ...INITIAL_SIMULATION_JOB,
+            jobId: null,
             status: 'pending',
+            progress: 0,
             phase: 'initializing',
             message: 'Starting simulation...',
+            completedAgents: 0,
+            totalAgents: 0,
+            partialReactions: [],
+            partialZones: [],
+            error: null,
           },
           // Clear previous results
           agentSimulation: null,
@@ -627,13 +604,13 @@ export const useCivicStore = create<CivicState>()(
         });
         
         try {
-          const response = await fetch(`${API_BASE}/simulate`, {
+          const response = await fetch(`${AI_BASE}/simulate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              message,
               scenario_id: scenarioId,
               session_id: get().sessionId,
-              proposal: proposalPayload,
               build_proposal: options.buildProposal,
               world_state: options.worldState,
               speaker_mode: options.speakerMode || 'user',
@@ -649,35 +626,17 @@ export const useCivicStore = create<CivicState>()(
           const data = await response.json();
           const jobId = data.job_id;
           
-          if (jobId) {
-            set((state) => ({
-              simulationJob: {
-                ...state.simulationJob,
-                jobId,
-                status: 'pending',
-                message: 'Simulation queued...',
-              },
-            }));
-            // Start polling
-            get().pollSimulationStatus(jobId);
-          } else {
-            // Immediate response (no background job) – treat as complete
-            set((state) => ({
-              isSimulating: false,
-              simulationJob: {
-                ...state.simulationJob,
-                status: 'complete',
-                progress: 100,
-                phase: 'complete',
-                message: 'Simulation finished',
-                result: data,
-              },
-              agentSimulation: data,
-              zoneSentiments: data.zones || [],
-              agentReactions: data.reactions || [],
-              townHall: data.town_hall || null,
-            }));
-          }
+          set((state) => ({
+            simulationJob: {
+              ...state.simulationJob,
+              jobId,
+              status: 'pending',
+              message: 'Simulation queued...',
+            },
+          }));
+          
+          // Start polling
+          get().pollSimulationStatus(jobId);
           
         } catch (error) {
           console.error('[SIM] Start failed:', error);
@@ -693,12 +652,14 @@ export const useCivicStore = create<CivicState>()(
       },
       
       pollSimulationStatus: async (jobId) => {
-        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/v1/ai';
+        const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8000/v1')
+          .replace(/\/$/, '');
+        const AI_BASE = `${apiBase}/ai`;
         const POLL_INTERVAL = 1500; // 1.5 seconds
         
         const poll = async () => {
           try {
-            const response = await fetch(`${API_BASE}/simulate/${jobId}`);
+            const response = await fetch(`${AI_BASE}/simulate/${jobId}`);
             
             if (!response.ok) {
               if (response.status === 404) {
@@ -764,12 +725,11 @@ export const useCivicStore = create<CivicState>()(
             if (data.status === 'error') {
               set({
                 isSimulating: false,
-            simulationJob: {
-              ...get().simulationJob,
-              status: 'error',
-              error: data.error || 'Simulation failed',
-              result: null,
-            },
+                simulationJob: {
+                  ...get().simulationJob,
+                  status: 'error',
+                  error: data.error || 'Simulation failed',
+                },
               });
               return; // Stop polling
             }
@@ -783,14 +743,13 @@ export const useCivicStore = create<CivicState>()(
             console.error('[SIM] Poll error:', error);
             set({
               isSimulating: false,
-          simulationJob: {
-            ...get().simulationJob,
-            status: 'error',
-            error: error instanceof Error ? error.message : 'Poll failed',
-            result: null,
-          },
-        });
-      }
+              simulationJob: {
+                ...get().simulationJob,
+                status: 'error',
+                error: error instanceof Error ? error.message : 'Poll failed',
+              },
+            });
+          }
         };
         
         // Start polling
@@ -801,15 +760,22 @@ export const useCivicStore = create<CivicState>()(
         // Cancel current simulation (client-side only for now)
         set({
           isSimulating: false,
-          simulationJob: { ...INITIAL_SIMULATION_JOB },
+          simulationJob: {
+            jobId: null,
+            status: 'idle',
+            progress: 0,
+            phase: '',
+            message: '',
+            completedAgents: 0,
+            totalAgents: 0,
+            partialReactions: [],
+            partialZones: [],
+            error: null,
+          },
         });
       },
       
       updateSimulationJob: (updates) => {
-        if (!updates) {
-          set({ simulationJob: { ...INITIAL_SIMULATION_JOB } });
-          return;
-        }
         set((state) => ({
           simulationJob: { ...state.simulationJob, ...updates },
         }));
@@ -1331,7 +1297,7 @@ export const useCivicStore = create<CivicState>()(
         }
         
         try {
-          await api.resetAgentOverride(scenario.id, agentKey);
+          const response = await api.resetAgentOverride(scenario.id, agentKey);
           
           set(state => ({
             agentOverrides: {
