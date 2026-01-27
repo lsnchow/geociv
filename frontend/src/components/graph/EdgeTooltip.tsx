@@ -25,7 +25,6 @@ export function EdgeTooltip({ edge, x, y }: EdgeTooltipProps) {
 
   // Determine edge type info
   const isDM = edge.type === 'dm';
-  const isActive = edge.status === 'running' || edge.status === 'pending';
   const color = isDM ? EDGE_COLORS.dm.stroke : EDGE_COLORS.call.stroke;
   
   // Status indicator

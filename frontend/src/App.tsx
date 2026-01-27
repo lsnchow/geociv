@@ -5,7 +5,6 @@ import { MapArena } from './components/map';
 import { ProposalPalette } from './components/palette';
 import { ResultsPanel } from './components/results';
 import { ProposalEditor } from './components/editor';
-import { HistoryTimeline } from './components/history';
 import { AgentGraphTrigger } from './components/graph';
 import { AICopilot } from './components/copilot';
 import { VariantGrid } from './components/variants';

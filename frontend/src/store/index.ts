@@ -595,6 +595,7 @@ export const useCivicStore = create<CivicState>()(
             partialReactions: [],
             partialZones: [],
             error: null,
+            result: null,
           },
           // Clear previous results
           agentSimulation: null,
@@ -771,6 +772,7 @@ export const useCivicStore = create<CivicState>()(
             partialReactions: [],
             partialZones: [],
             error: null,
+            result: null,
           },
         });
       },
@@ -1297,7 +1299,7 @@ export const useCivicStore = create<CivicState>()(
         }
         
         try {
-          const response = await api.resetAgentOverride(scenario.id, agentKey);
+          await api.resetAgentOverride(scenario.id, agentKey);
           
           set(state => ({
             agentOverrides: {

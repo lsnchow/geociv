@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { GraphNode, GraphEdge, GraphFilters } from './graphTypes';
-import { CALL_STATE_COLORS, EDGE_COLORS, getEdgeOpacity } from './graphTypes';
+import { EDGE_COLORS, getEdgeOpacity } from './graphTypes';
 import { GraphNodeComponent } from './GraphNode';
 import { EdgeTooltip } from './EdgeTooltip';
 
@@ -67,9 +67,9 @@ export function ForceGraph({
     return pos;
   }, [filteredNodes, centerX, centerY, width, height]);
 
-  const handleDragStart = () => {};
-  const handleDrag = () => {};
-  const handleDragEnd = () => {};
+  const handleDragStart = (_node: GraphNode, _e: React.MouseEvent) => {};
+  const handleDrag = (_node: GraphNode, _e: React.MouseEvent, _delta: { dx: number; dy: number }) => {};
+  const handleDragEnd = (_node: GraphNode) => {};
 
   // Edge hover handlers
   const handleEdgeHover = (edge: GraphEdge, event: React.MouseEvent) => {
@@ -85,15 +85,6 @@ export function ForceGraph({
   // Get node position
   const getNodePos = (id: string) => {
     return positions.get(id) || { x: width / 2, y: height / 2 };
-  };
-
-  // Get edge path
-  const getEdgePath = (edge: GraphEdge) => {
-    const sourceId = typeof edge.source === 'string' ? edge.source : edge.source.id;
-    const targetId = typeof edge.target === 'string' ? edge.target : edge.target.id;
-    const source = getNodePos(sourceId);
-    const target = getNodePos(targetId);
-    return `M ${source.x} ${source.y} L ${target.x} ${target.y}`;
   };
 
   return (

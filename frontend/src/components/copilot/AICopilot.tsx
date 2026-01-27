@@ -104,7 +104,19 @@ export function AICopilot() {
       }
       
       // Clear the simulation job
-      updateSimulationJob(null);
+      updateSimulationJob({
+        jobId: null,
+        status: 'idle',
+        progress: 0,
+        phase: '',
+        message: '',
+        completedAgents: 0,
+        totalAgents: 0,
+        partialReactions: [],
+        partialZones: [],
+        error: null,
+        result: null,
+      });
       setIsProcessing(false);
     } else if (simulationJob?.status === 'error') {
       const errorText = simulationJob.error || 'Unknown error';
@@ -119,7 +131,19 @@ export function AICopilot() {
       };
       
       setMessages(prev => [...prev, assistantMessage]);
-      updateSimulationJob(null);
+      updateSimulationJob({
+        jobId: null,
+        status: 'idle',
+        progress: 0,
+        phase: '',
+        message: '',
+        completedAgents: 0,
+        totalAgents: 0,
+        partialReactions: [],
+        partialZones: [],
+        error: null,
+        result: null,
+      });
       setIsProcessing(false);
     }
   }, [simulationJob?.status, simulationJob?.result]);
