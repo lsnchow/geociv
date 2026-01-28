@@ -59,6 +59,10 @@ engine = create_async_engine(
     echo=settings.debug,
     future=True,
     connect_args=connect_kwargs,
+    # Revalidate stale connections dropped by the provider (e.g., Supabase/Heroku poolers)
+    pool_pre_ping=True,
+    # Force connection recycle to avoid long-idle sockets being closed server-side
+    pool_recycle=900,
 )
 
 async_session_maker = async_sessionmaker(

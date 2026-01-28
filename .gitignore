@@ -1,3 +1,4 @@
 .env
 venv
 .cursor
+.github/agents
