@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import scenarios, proposals, simulate, observability
-# OLD routers disabled: chat, ai, ai_chat
+from app.routers import scenarios, proposals, simulate, observability, ai_chat
+# OLD routers disabled: chat, ai
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ app.include_router(observability.router, prefix="/v1", tags=["Observability"])
 app.include_router(scenarios.router, prefix="/v1", tags=["Scenarios"])
 app.include_router(proposals.router, prefix="/v1", tags=["Proposals"])
 app.include_router(simulate.router, prefix="/v1", tags=["Simulation"])
+app.include_router(ai_chat.router, prefix="/v1", tags=["AI Chat"])
 # OLD routers disabled until core works:
 # app.include_router(chat.router, prefix="/v1", tags=["Chat"])
 # app.include_router(ai.router, prefix="/v1", tags=["AI Agent"])
@@ -56,4 +57,3 @@ async def root():
         "version": "0.1.0",
         "description": "Kingston Civic Reaction Simulator",
     }
-
